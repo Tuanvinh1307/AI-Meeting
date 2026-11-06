@@ -2,13 +2,13 @@
 
 Hệ thống thông minh hỗ trợ phân tích nội dung cuộc họp, bóc băng tự động (Speech-to-Text), tóm tắt thông tin quan trọng và tự động trích xuất danh sách công việc (Action Items/Tasks) kèm deadline và người phụ trách bằng AI.
 
-## 🛠️ Công nghệ sử dụng
+##  Công nghệ sử dụng
 - **Ngôn ngữ:** Python 3.12+
 - **Giao diện Web:** Streamlit
 - **Quản lý quy trình AI:** LangGraph
 - **Mô hình ngôn ngữ & Speech-to-Text:** Whisper, Hugging Face, LLM (OpenAI / Gemini / Groq)
 
-## 📁 Cấu trúc dự án (Kiến trúc phân tầng - Decoupled Architecture)
+##  Cấu trúc dự án (Kiến trúc phân tầng - Decoupled Architecture)
 - `config/`: Cấu hình hệ thống, nạp biến môi trường `.env`.
 - `src/schemas/`: Định nghĩa hợp đồng dữ liệu chuẩn bằng Pydantic (`meeting.py`, `task.py`).
 - `src/services/`: Tầng nghiệp vụ (`MeetingService`), điều phối giữa UI, AI Core và Database.
@@ -18,7 +18,7 @@ Hệ thống thông minh hỗ trợ phân tích nội dung cuộc họp, bóc b�
 - `src/utils/`: Các hàm tiện ích hỗ trợ xuất báo cáo.
 - `data/`: Dữ liệu âm thanh mẫu, exports và database `meetings.db`.
 
-## 🚀 Hướng dẫn kích hoạt & khởi chạy ứng dụng
+##  Hướng dẫn kích hoạt & khởi chạy ứng dụng
 
 ### 1. Kích hoạt môi trường ảo
 Trên Windows PowerShell:
