@@ -6,7 +6,8 @@ Quy tắc kiến trúc:
 - Chỉ giao tiếp thông qua Pydantic schemas (MeetingAnalysis, TaskItem, TranscriptSegment).
 - Sẵn sàng 100% để tái sử dụng trong FastAPI router endpoints sau này.
 """
-from typing import List, Optional, Dict, Any
+from pathlib import Path
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from src.schemas.meeting import MeetingAnalysis, TranscriptSegment
 from src.schemas.task import TaskItem, TaskPriority, TaskStatus, TaskConfirmationStatus
@@ -17,11 +18,12 @@ from src.db.repository import MeetingRepository, TaskRepository
 class MeetingService:
     """Service chịu trách nhiệm xử lý logic nghiệp vụ liên quan đến cuộc họp."""
 
-    def __init__(self):
-        # Đảm bảo database và migrations đã hoàn tất
-        init_db()
-        self.meeting_repo = MeetingRepository()
-        self.task_repo = TaskRepository()
+    def __init__(self, db_path: Optional[Union[Path, str]] = None):
+        # Đảm bảo database và migrations đã hoàn tất trên file được chỉ định
+        self.db_path = db_path
+        init_db(self.db_path)
+        self.meeting_repo = MeetingRepository(db_path=self.db_path)
+        self.task_repo = TaskRepository(db_path=self.db_path)
 
     def process_transcript(self, raw_transcript: str, title: str = "Cuộc họp mới") -> MeetingAnalysis:
         """

@@ -1,11 +1,13 @@
 """
 Repository Layer: Tách biệt hoàn toàn các câu lệnh SQL khỏi Service Layer.
+Hỗ trợ truyền db_path tùy chỉnh để cô lập hoàn toàn môi trường kiểm thử (Testing).
 Bao gồm:
 - MeetingRepository: Quản lý CRUD cho cuộc họp và các đoạn thoại (Transcript Segments).
 - TaskRepository: Quản lý CRUD cho công việc (Tasks/Action Items).
 """
 import json
-from typing import List, Optional, Dict, Any
+from pathlib import Path
+from typing import List, Optional, Dict, Any, Union
 from src.db.connection import get_db_connection
 from src.schemas.task import TaskItem, TaskPriority, TaskStatus, TaskConfirmationStatus
 from src.schemas.meeting import MeetingAnalysis, TranscriptSegment
@@ -14,12 +16,15 @@ from src.schemas.meeting import MeetingAnalysis, TranscriptSegment
 class MeetingRepository:
     """Quản lý các thao tác dữ liệu liên quan đến Cuộc họp."""
 
+    def __init__(self, db_path: Optional[Union[Path, str]] = None):
+        self.db_path = db_path
+
     def create(self, meeting: MeetingAnalysis) -> int:
         """
         Lưu một cuộc họp mới vào database, bao gồm cả các đoạn thoại (nếu có).
         Trả về ID của cuộc họp vừa tạo.
         """
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             key_decisions_json = json.dumps(meeting.key_decisions, ensure_ascii=False)
 
@@ -65,7 +70,7 @@ class MeetingRepository:
 
     def get_by_id(self, meeting_id: int) -> Optional[Dict[str, Any]]:
         """Lấy thông tin chi tiết một cuộc họp kèm các đoạn thoại."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,))
             row = cursor.fetchone()
@@ -73,7 +78,6 @@ class MeetingRepository:
                 return None
 
             meeting_dict = dict(row)
-            # Parse key_decisions từ JSON
             try:
                 meeting_dict["key_decisions"] = json.loads(meeting_dict.get("key_decisions") or "[]")
             except Exception:
@@ -96,7 +100,7 @@ class MeetingRepository:
 
     def list_all(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Lấy danh sách các cuộc họp gần đây."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -112,7 +116,7 @@ class MeetingRepository:
 
     def update_summary(self, meeting_id: int, summary: str, key_decisions: Optional[List[str]] = None) -> bool:
         """Cập nhật phần tóm tắt và quyết định chính của cuộc họp."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             if key_decisions is not None:
                 decisions_json = json.dumps(key_decisions, ensure_ascii=False)
@@ -130,7 +134,7 @@ class MeetingRepository:
 
     def delete(self, meeting_id: int) -> bool:
         """Xóa một cuộc họp (SQLite tự xóa các task và segment liên quan nhờ ON DELETE CASCADE)."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
             conn.commit()
@@ -139,6 +143,9 @@ class MeetingRepository:
 
 class TaskRepository:
     """Quản lý các thao tác dữ liệu liên quan đến Công việc (Tasks)."""
+
+    def __init__(self, db_path: Optional[Union[Path, str]] = None):
+        self.db_path = db_path
 
     def _row_to_task(self, row: Any) -> TaskItem:
         """Hàm trợ giúp chuyển một dòng SQLite Row thành Pydantic TaskItem."""
@@ -165,7 +172,7 @@ class TaskRepository:
 
     def create(self, meeting_id: int, task: TaskItem) -> int:
         """Tạo một công việc mới liên kết với cuộc họp."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -205,7 +212,7 @@ class TaskRepository:
 
     def get_by_id(self, task_id: int) -> Optional[TaskItem]:
         """Lấy một công việc theo ID."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
             row = cursor.fetchone()
@@ -215,7 +222,7 @@ class TaskRepository:
 
     def list_by_meeting_id(self, meeting_id: int) -> List[TaskItem]:
         """Lấy tất cả công việc của một cuộc họp cụ thể."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tasks WHERE meeting_id = ? ORDER BY id ASC", (meeting_id,))
             rows = cursor.fetchall()
@@ -227,7 +234,7 @@ class TaskRepository:
         confirmation_status: Optional[str] = None,
     ) -> List[TaskItem]:
         """Lấy toàn bộ công việc, có thể lọc theo tiến độ thực hiện hoặc trạng thái duyệt."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             query = "SELECT * FROM tasks WHERE 1=1"
             params = []
@@ -246,7 +253,7 @@ class TaskRepository:
 
     def update_status(self, task_id: int, status: str) -> bool:
         """Cập nhật tiến độ thực hiện của công việc (Cần làm / Đang làm / Hoàn thành)."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, task_id))
             conn.commit()
@@ -254,7 +261,7 @@ class TaskRepository:
 
     def update_confirmation(self, task_id: int, confirmation_status: str) -> bool:
         """Cập nhật trạng thái xác nhận của người dùng (Chờ duyệt / Đã duyệt / Đã từ chối)."""
-        with get_db_connection() as conn:
+        with get_db_connection(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE tasks SET confirmation_status = ? WHERE id = ?",
@@ -262,4 +269,3 @@ class TaskRepository:
             )
             conn.commit()
             return cursor.rowcount > 0
-
