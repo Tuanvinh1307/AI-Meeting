@@ -1,0 +1,12 @@
+# ==============================================================================
+# AI Meeting Intelligence - Dependencies (Khởi tạo ban đầu)
+# ==============================================================================
+
+# Web Framework
+streamlit>=1.38.0
+
+# Environment Variable Management
+python-dotenv>=1.0.1
+
+# Data Validation & Schemas (Chuẩn hóa dữ liệu cho AI & API)
+pydantic>=2.8.0
