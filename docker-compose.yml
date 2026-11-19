@@ -40,10 +40,13 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://aimeeting:aimeeting123@db:5432/aimeeting_db
+      HF_HOME: /root/.cache/huggingface
     volumes:
       - ./data:/app/data
+      - hf_cache:/root/.cache/huggingface
     ports:
       - "8000:8000"
 
 volumes:
   pgdata:
+  hf_cache:

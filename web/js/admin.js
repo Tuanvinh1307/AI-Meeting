@@ -5,6 +5,47 @@
  */
 
 const STORAGE_USER_KEY = "ai_meeting_current_user_v2";
+const STORAGE_TOKEN_KEY = "ai_meeting_access_token_v2";
+
+function getAccessToken() {
+  return localStorage.getItem(STORAGE_TOKEN_KEY) || "";
+}
+
+function setAccessToken(token) {
+  if (token) {
+    localStorage.setItem(STORAGE_TOKEN_KEY, token);
+  }
+}
+
+function clearAccessToken() {
+  localStorage.removeItem(STORAGE_TOKEN_KEY);
+}
+
+// Tự động đính kèm Authorization: Bearer <token> cho mọi lệnh fetch() và xử lý 401
+const _nativeAdminFetch = window.fetch.bind(window);
+window.fetch = async function (input, init = {}) {
+  const urlStr = typeof input === "string" ? input : input?.url || "";
+  const token = getAccessToken();
+  const headers = new Headers(init.headers || {});
+
+  if (token && urlStr.startsWith("/api/") && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await _nativeAdminFetch(input, { ...init, headers });
+
+  const isAuthEndpoint =
+    urlStr.startsWith("/api/auth/login") || urlStr.startsWith("/api/auth/register");
+  if (response.status === 401 && urlStr.startsWith("/api/") && !isAuthEndpoint) {
+    adminState.currentAdmin = null;
+    clearAccessToken();
+    localStorage.removeItem(STORAGE_USER_KEY);
+    if (typeof lockAdminPortal === "function") {
+      lockAdminPortal("Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
+    }
+  }
+  return response;
+};
 
 const adminState = {
   currentAdmin: null,
@@ -118,12 +159,15 @@ async function unlockAdminPortal(adminUser) {
 async function initAdminPortal() {
   refreshIcons();
   let savedUser = null;
+  const savedToken = getAccessToken();
   try {
     const raw = localStorage.getItem(STORAGE_USER_KEY);
     if (raw) savedUser = JSON.parse(raw);
   } catch (_) { }
 
-  if (!savedUser || !savedUser.username) {
+  if (!savedUser || !savedUser.username || !savedToken) {
+    clearAccessToken();
+    localStorage.removeItem(STORAGE_USER_KEY);
     lockAdminPortal();
     return;
   }
@@ -168,6 +212,10 @@ async function submitAdminSignIn() {
       );
     }
 
+    if (data.access_token) {
+      setAccessToken(data.access_token);
+    }
+
     document.getElementById("admin-login-password").value = "";
     await unlockAdminPortal(data.user);
     showToast(`Đã xác thực quyền Quản trị viên: ${data.user.name}`);
@@ -180,6 +228,7 @@ async function submitAdminSignIn() {
 
 function logoutAdminPortal() {
   adminState.currentAdmin = null;
+  clearAccessToken();
   localStorage.removeItem(STORAGE_USER_KEY);
   lockAdminPortal();
 }
@@ -220,8 +269,9 @@ function renderAdminTable() {
   const statusFilter = document.getElementById("admin-filter-status")?.value || "";
 
   const filtered = adminState.users.filter((u) => {
-    if (statusFilter === "verified" && !u.onboarding_completed) return false;
-    if (statusFilter === "pending" && u.onboarding_completed) return false;
+    const hasValidVoice = Boolean(u.has_voiceprint && u.audio_url);
+    if (statusFilter === "verified" && !hasValidVoice) return false;
+    if (statusFilter === "pending" && hasValidVoice) return false;
     if (!q) return true;
     const hay = `${u.id} ${u.username} ${u.name} ${u.role} ${u.department} ${u.email}`.toLowerCase();
     return hay.includes(q);
@@ -244,7 +294,9 @@ function renderAdminTable() {
         ? `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-900 text-white">Quản trị viên</span>`
         : `<span class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">Thành viên</span>`;
 
-      const vpStatus = u.onboarding_completed
+      const hasValidVoice = Boolean(u.has_voiceprint && u.audio_url);
+
+      const vpStatus = hasValidVoice
         ? `<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[11px]">
              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
              Đã thu âm
@@ -254,10 +306,10 @@ function renderAdminTable() {
              Chưa thu âm
            </div>`;
 
-      const audioCell =
-        u.has_voiceprint && u.audio_url
-          ? `<audio controls preload="none" src="${u.audio_url}?t=${Date.now()}" class="h-8 w-56"></audio>`
-          : `<span class="text-xs italic text-slate-400">Chưa có bản ghi</span>`;
+      const jwtToken = encodeURIComponent(getAccessToken());
+      const audioCell = hasValidVoice
+        ? `<audio controls preload="none" src="${u.audio_url}?token=${jwtToken}&t=${Date.now()}" class="h-8 w-56"></audio>`
+        : `<span class="text-xs italic text-slate-400">Chưa có bản ghi</span>`;
 
       return `
         <tr class="hover:bg-slate-50/80 transition">
@@ -350,7 +402,7 @@ function openCreateUserModal() {
   document.getElementById("modal-profile-id").value = "";
   document.getElementById("modal-admin-title").textContent = "Thêm nhân sự";
   document.getElementById("modal-admin-subtitle").textContent =
-    "Nhập thông tin tài khoản, chức vụ và thu âm hoặc tải lên mẫu giọng nói.";
+    "Nhập thông tin tài khoản, chức vụ và thu âm hoặc tải lên mẫu giọng nói (.wav, .mp3).";
   document.getElementById("modal-username").value = "";
   document.getElementById("modal-email").value = "";
   document.getElementById("modal-password").value = "";
@@ -359,6 +411,11 @@ function openCreateUserModal() {
   document.getElementById("modal-is-admin").checked = false;
   clearModalVoiceAudio();
 
+  const voiceSection = document.getElementById("admin-voice-section");
+  if (voiceSection) {
+    voiceSection.classList.remove("ring-2", "ring-slate-900/15", "border-slate-400");
+  }
+
   document.getElementById("admin-user-modal").classList.remove("hidden");
   refreshIcons();
 }
@@ -366,10 +423,11 @@ function openCreateUserModal() {
 function openEditUserModal(user, focusRecorder = false) {
   document.getElementById("modal-profile-id").value = String(user.id);
   document.getElementById("modal-admin-title").textContent = focusRecorder
-    ? `Cập nhật mẫu giọng nói: ${user.name}`
+    ? `Đổi mẫu giọng nói: ${user.name}`
     : `Chỉnh sửa nhân sự #${user.id}`;
-  document.getElementById("modal-admin-subtitle").textContent =
-    "Cập nhật họ tên, vai trò, phân quyền hoặc mẫu giọng nói mới.";
+  document.getElementById("modal-admin-subtitle").textContent = focusRecorder
+    ? "Thu âm trực tiếp qua Micro hoặc tải tệp âm thanh (.wav, .mp3) từ máy tính."
+    : "Cập nhật họ tên, vai trò, phân quyền hoặc mẫu giọng nói mới.";
 
   document.getElementById("modal-username").value = user.username || "";
   document.getElementById("modal-email").value = user.email || "";
@@ -381,6 +439,18 @@ function openEditUserModal(user, focusRecorder = false) {
 
   document.getElementById("admin-user-modal").classList.remove("hidden");
   refreshIcons();
+
+  const voiceSection = document.getElementById("admin-voice-section");
+  if (voiceSection) {
+    if (focusRecorder) {
+      voiceSection.classList.add("ring-2", "ring-slate-900/15", "border-slate-400");
+      setTimeout(() => {
+        voiceSection.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 60);
+    } else {
+      voiceSection.classList.remove("ring-2", "ring-slate-900/15", "border-slate-400");
+    }
+  }
 }
 
 function closeAdminUserModal() {
@@ -390,17 +460,37 @@ function closeAdminUserModal() {
   document.getElementById("admin-user-modal").classList.add("hidden");
 }
 
-function onModalAudioFileSelected(input) {
-  if (input.files && input.files.length > 0) {
-    adminState.recordedWavBlob = null;
-    const box = document.getElementById("modal-preview-box");
-    const audio = document.getElementById("modal-preview-audio");
-    const label = document.getElementById("modal-preview-label");
-    if (box && audio && label) {
-      box.classList.remove("hidden");
-      label.textContent = `Đã chọn tệp: ${input.files[0].name}`;
-      audio.src = URL.createObjectURL(input.files[0]);
+async function onModalAudioFileSelected(input) {
+  if (!input.files || input.files.length === 0) return;
+  const selectedFile = input.files[0];
+  adminState.recordedWavBlob = null;
+
+  const box = document.getElementById("modal-preview-box");
+  const audio = document.getElementById("modal-preview-audio");
+  const label = document.getElementById("modal-preview-label");
+
+  if (box && audio && label) {
+    box.classList.remove("hidden");
+    label.textContent = `Đã chọn tệp: ${selectedFile.name} (${(
+      selectedFile.size / 1024
+    ).toFixed(1)} KB)`;
+    audio.src = URL.createObjectURL(selectedFile);
+  }
+
+  try {
+    const arrayBuf = await selectedFile.arrayBuffer();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      const decodeCtx = new AudioCtx();
+      const audioBuffer = await decodeCtx.decodeAudioData(arrayBuf.slice(0));
+      const monoData = audioBuffer.getChannelData(0);
+      const downsampled = downsampleBuffer(monoData, audioBuffer.sampleRate, 16000);
+      adminState.recordedWavBlob = encodeWAV16Bit(downsampled, 16000);
+      decodeCtx.close().catch(() => {});
     }
+  } catch (_) {
+    // Fallback: gui truc tiep file goc (.wav / .mp3) neu trinh duyet khong decode duoc
+    adminState.recordedWavBlob = null;
   }
 }
 

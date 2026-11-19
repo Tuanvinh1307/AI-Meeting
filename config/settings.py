@@ -3,6 +3,7 @@ Module quan ly cau hinh tap trung cho ung dung AI Meeting Intelligence.
 Doc cac bien moi truong tu file .env neu co.
 """
 
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -14,7 +15,18 @@ load_dotenv(BASE_DIR / ".env")
 
 # Cau hinh chung
 APP_NAME = "AI Meeting Intelligence & Task Management System"
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
+
+# Cau hinh Bao mat Xac thuc JWT (co gia tri mac dinh an toan cho moi truong local)
+JWT_SECRET_KEY = os.getenv(
+    "JWT_SECRET_KEY",
+    "aimeeting-local-dev-jwt-secret-key-2026-safe-default",
+).strip() or "aimeeting-local-dev-jwt-secret-key-2026-safe-default"
+JWT_ALGORITHM = "HS256"
+try:
+    JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+except ValueError:
+    JWT_EXPIRE_MINUTES = 1440
 
 # Cau hinh thu muc luu tru du lieu
 DATA_DIR = BASE_DIR / "data"

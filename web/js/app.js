@@ -3,6 +3,46 @@
  */
 
 const STORAGE_USER_KEY = "ai_meeting_current_user_v2";
+const STORAGE_TOKEN_KEY = "ai_meeting_access_token_v2";
+
+function getAccessToken() {
+  return localStorage.getItem(STORAGE_TOKEN_KEY) || "";
+}
+
+function setAccessToken(token) {
+  if (token) {
+    localStorage.setItem(STORAGE_TOKEN_KEY, token);
+  }
+}
+
+function clearAccessToken() {
+  localStorage.removeItem(STORAGE_TOKEN_KEY);
+}
+
+// Tự động đính kèm Authorization: Bearer <token> cho mọi lệnh fetch() và xử lý 401
+const _nativeFetch = window.fetch.bind(window);
+window.fetch = async function (input, init = {}) {
+  const urlStr = typeof input === "string" ? input : input?.url || "";
+  const token = getAccessToken();
+  const headers = new Headers(init.headers || {});
+
+  if (token && urlStr.startsWith("/api/") && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await _nativeFetch(input, { ...init, headers });
+
+  const isAuthEndpoint =
+    urlStr.startsWith("/api/auth/login") || urlStr.startsWith("/api/auth/register");
+  if (response.status === 401 && urlStr.startsWith("/api/") && !isAuthEndpoint) {
+    clearAccessToken();
+    localStorage.removeItem(STORAGE_USER_KEY);
+    if (typeof logoutCurrentUser === "function") {
+      logoutCurrentUser();
+    }
+  }
+  return response;
+};
 
 const state = {
   currentUser: null,
@@ -174,12 +214,15 @@ function hideAuthError() {
 
 function checkAuthAndOnboardingGate() {
   let savedUser = null;
+  const savedToken = getAccessToken();
   try {
     const raw = localStorage.getItem(STORAGE_USER_KEY);
     if (raw) savedUser = JSON.parse(raw);
   } catch (_) {}
 
-  if (!savedUser || !savedUser.username) {
+  if (!savedUser || !savedUser.username || !savedToken) {
+    clearAccessToken();
+    localStorage.removeItem(STORAGE_USER_KEY);
     showAuthGateOverlay();
     return;
   }
@@ -272,6 +315,9 @@ async function submitLoginForm() {
     if (!res.ok) {
       throw new Error(data.detail || "Tên đăng nhập hoặc mật khẩu không chính xác.");
     }
+    if (data.access_token) {
+      setAccessToken(data.access_token);
+    }
     document.getElementById("login-password-input").value = "";
     handleAuthenticatedUser(data.user);
     if (!data.requires_onboarding) {
@@ -308,6 +354,9 @@ async function submitRegisterForm() {
     if (!res.ok) {
       throw new Error(data.detail || "Không thể đăng ký tài khoản mới.");
     }
+    if (data.access_token) {
+      setAccessToken(data.access_token);
+    }
     document.getElementById("reg-password-input").value = "";
     handleAuthenticatedUser(data.user);
     showToast("Tạo tài khoản thành công! Vui lòng thiết lập chức vụ & thu âm mẫu giọng cá nhân.", "info");
@@ -327,6 +376,7 @@ function logoutCurrentUser() {
   state.currentMeetingId = null;
   state.currentMeeting = null;
   state.allTasks = [];
+  clearAccessToken();
   localStorage.removeItem(STORAGE_USER_KEY);
   const audio = document.getElementById("global-audio");
   if (audio) {
@@ -535,6 +585,9 @@ async function submitMandatoryOnboarding() {
       throw new Error(err.detail || "Không thể hoàn tất thiết lập giọng nói");
     }
     const data = await res.json();
+    if (data.access_token) {
+      setAccessToken(data.access_token);
+    }
     showToast(`Hoàn tất thiết lập hồ sơ cho ${data.user.name} (${data.user.role})!`);
     handleAuthenticatedUser(data.user);
   } catch (err) {
@@ -638,7 +691,7 @@ async function loadDashboard(loadFirstMeeting = false) {
   }
 
   try {
-    const res = await fetch(`/api/dashboard?username=${encodeURIComponent(currentUsername)}`);
+    const res = await fetch("/api/dashboard");
     if (!res.ok) throw new Error("Không thể tải danh sách cuộc họp");
     const data = await res.json();
 
@@ -721,21 +774,19 @@ function renderMeetingSelector() {
 
 async function selectMeeting(meetingId) {
   if (!meetingId) return;
-  const currentUsername = state.currentUser?.username || "";
   state.currentMeetingId = Number(meetingId);
   renderSidebarMeetings();
   renderMeetingSelector();
 
   try {
-    const res = await fetch(
-      `/api/meetings/${meetingId}?username=${encodeURIComponent(currentUsername)}`
-    );
+    const res = await fetch(`/api/meetings/${meetingId}`);
     if (!res.ok) throw new Error("Không tìm thấy cuộc họp");
     const detail = await res.json();
     state.currentMeeting = detail;
 
     const audio = document.getElementById("global-audio");
-    const targetSrc = `${detail.audio_url}?username=${encodeURIComponent(currentUsername)}&t=${Date.now()}`;
+    const jwtToken = getAccessToken();
+    const targetSrc = `${detail.audio_url}?token=${encodeURIComponent(jwtToken)}&t=${Date.now()}`;
     if (audio && audio.getAttribute("data-meeting-id") !== String(detail.id)) {
       audio.src = targetSrc;
       audio.setAttribute("data-meeting-id", String(detail.id));
@@ -1145,7 +1196,6 @@ function highlightActiveUtteranceByTime(currentTime, isPlaying) {
 
 async function reanalyzeCurrentMeeting() {
   if (!state.currentMeetingId) return;
-  const currentUsername = state.currentUser?.username || "";
   const btn = document.getElementById("btn-reanalyze");
   const oldHtml = btn.innerHTML;
   btn.disabled = true;
@@ -1153,10 +1203,9 @@ async function reanalyzeCurrentMeeting() {
   refreshIcons();
 
   try {
-    const res = await fetch(
-      `/api/meetings/${state.currentMeetingId}/analyze?username=${encodeURIComponent(currentUsername)}`,
-      { method: "POST" }
-    );
+    const res = await fetch(`/api/meetings/${state.currentMeetingId}/analyze`, {
+      method: "POST",
+    });
     if (!res.ok) throw new Error("Không thể tóm tắt lại biên bản");
     showToast("Đã cập nhật bản tóm tắt và danh sách công việc!");
     await loadDashboard(false);
@@ -1212,13 +1261,11 @@ function exportMeetingMarkdown() {
 async function deleteCurrentMeeting() {
   if (!state.currentMeetingId) return;
   if (!confirm(`Bạn có chắc chắn muốn xóa cuộc họp #${state.currentMeetingId}?`)) return;
-  const currentUsername = state.currentUser?.username || "";
 
   try {
-    const res = await fetch(
-      `/api/meetings/${state.currentMeetingId}?username=${encodeURIComponent(currentUsername)}`,
-      { method: "DELETE" }
-    );
+    const res = await fetch(`/api/meetings/${state.currentMeetingId}`, {
+      method: "DELETE",
+    });
     if (!res.ok) throw new Error("Không thể xóa cuộc họp");
     showToast(`Đã xóa cuộc họp #${state.currentMeetingId}`);
     state.currentMeetingId = null;
@@ -1253,10 +1300,8 @@ async function submitMeetingUpload() {
     return;
   }
 
-  const currentUsername = state.currentUser?.username || "";
   const formData = new FormData();
   formData.append("title", title);
-  formData.append("username", currentUsername);
   formData.append("auto_analyze", String(autoAnalyze));
   formData.append("use_sample_audio", String(useSample || !hasAudioFile));
   if (hasAudioFile) {
@@ -1272,14 +1317,10 @@ async function submitMeetingUpload() {
   progBox.classList.remove("hidden");
 
   try {
-    const res = await fetch(
-      `/api/meetings/upload?username=${encodeURIComponent(currentUsername)}`,
-      {
-        method: "POST",
-        headers: { "X-Username": currentUsername },
-        body: formData,
-      }
-    );
+    const res = await fetch("/api/meetings/upload", {
+      method: "POST",
+      body: formData,
+    });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.detail || "Không thể xử lý file ghi âm cuộc họp");
@@ -1316,12 +1357,12 @@ async function loadActionCenterTasks() {
   const conf = document.getElementById("filter-confirmation")?.value || "";
   const st = document.getElementById("filter-status")?.value || "";
   const params = new URLSearchParams();
-  params.set("username", currentUsername);
   if (conf) params.set("confirmation_status", conf);
   if (st) params.set("status", st);
+  const queryStr = params.toString();
 
   try {
-    const res = await fetch(`/api/tasks?${params.toString()}`);
+    const res = await fetch(queryStr ? `/api/tasks?${queryStr}` : "/api/tasks");
     if (!res.ok) throw new Error("Không thể tải danh sách công việc");
     const data = await res.json();
     state.allTasks = data.tasks || [];

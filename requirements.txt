@@ -2,10 +2,12 @@
 # AI Meeting Intelligence - Production Dependencies
 # ==============================================================================
 
-# Web Server & REST API
+# Web Server, REST API & Security (JWT + Bcrypt)
 fastapi>=0.115.0
 uvicorn>=0.32.0
 python-multipart>=0.0.12
+PyJWT>=2.9.0
+bcrypt>=4.2.0
 
 # Database Driver (PostgreSQL 17)
 psycopg2-binary>=2.9.9
