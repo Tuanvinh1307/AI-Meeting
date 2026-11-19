@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: aimeeting_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aimeeting
+      POSTGRES_PASSWORD: aimeeting123
+      POSTGRES_DB: aimeeting_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aimeeting -d aimeeting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:latest
+    container_name: aimeeting_adminer
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+
+  app:
+    build: .
+    container_name: aimeeting_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://aimeeting:aimeeting123@db:5432/aimeeting_db
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:

@@ -1,0 +1,167 @@
+/* 
+ * AI Meeting Intelligence - SaaS Editorial & Studio Stylesheet
+ * Inspired by Linear, Notion & Otter.ai
+ */
+
+:root {
+  --bg-canvas: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --sidebar-bg: #0F172A;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --accent-indigo: #4F46E5;
+  --border-subtle: #E2E8F0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-mono-time {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+/* Sidebar Nav Item */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #94A3B8;
+  transition: all 0.16s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nav-item:hover {
+  color: #F8FAFC;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.active {
+  color: #FFFFFF;
+  background-color: rgba(79, 70, 229, 0.22);
+  box-shadow: inset 3px 0 0 #6366F1;
+}
+
+/* Editorial Transcript Row (Otter.ai / Notion clean stream) */
+.utterance-row {
+  position: relative;
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  border-left: 3px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  cursor: pointer;
+}
+
+.utterance-row:hover {
+  background-color: #F1F5F9;
+}
+
+.utterance-row.playing {
+  background-color: #EEF2FF;
+  border-left-color: #4F46E5;
+  box-shadow: 0 2px 10px -2px rgba(79, 70, 229, 0.12);
+}
+
+.utterance-row.playing .utterance-text {
+  color: #1E1B4B;
+  font-weight: 500;
+}
+
+/* Audio Progress Scrubber */
+input[type="range"].audio-scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #E2E8F0;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"].audio-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4F46E5;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+input[type="range"].audio-scrubber::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+}
+
+/* Pulse animation for voice recording */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.65);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.recording-pulse {
+  animation: pulse-ring 1.6s infinite;
+}
+
+/* Subtle fade-in for views */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-animate {
+  animation: fadeIn 0.18s ease-out;
+}

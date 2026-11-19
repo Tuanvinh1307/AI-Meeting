@@ -6,6 +6,29 @@ from pydantic import BaseModel, Field
 from src.schemas.task import TaskItem
 
 
+class SpeakerProfile(BaseModel):
+    """
+    Hồ sơ nhân sự / tài khoản người dùng kèm vector đặc trưng giọng nói (Voiceprint Embedding) và chức vụ.
+    """
+    id: Optional[int] = Field(default=None, description="ID nhân sự trong Database")
+    username: Optional[str] = Field(default=None, description="Tên đăng nhập duy nhất của nhân sự")
+    email: str = Field(default="", description="Địa chỉ email nhân sự")
+    password_hash: str = Field(default="", description="Băm SHA-256 của mật khẩu đăng nhập")
+    name: str = Field(..., description="Họ và tên nhân sự")
+    role: str = Field(..., description="Chức vụ / Vai trò (ví dụ: Trưởng dự án, Kỹ sư AI, Backend Developer, QA)")
+    department: str = Field(default="", description="Phòng ban")
+    voiceprint_json: str = Field(default="[]", description="Vector đặc trưng giọng nói dạng JSON list float")
+    sample_audio_path: Optional[str] = Field(default=None, description="Đường dẫn file âm thanh mẫu giọng")
+    is_admin: bool = Field(default=False, description="Quyền Quản trị viên hệ thống")
+    onboarding_completed: bool = Field(default=True, description="Đã hoàn tất thiết lập hồ sơ và thử giọng lần đầu")
+    created_at: Optional[str] = Field(default=None, description="Thời điểm tạo hồ sơ")
+
+    @property
+    def display_label(self) -> str:
+        """Nhãn hiển thị chuẩn gồm Họ tên và Chức vụ."""
+        return f"{self.name} ({self.role})" if self.role else self.name
+
+
 class TranscriptSegment(BaseModel):
     """
     Đại diện cho 1 đoạn phát biểu của 1 người cụ thể (Speaker Diarization & Audio STT).

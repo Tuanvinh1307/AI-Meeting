@@ -1,0 +1,56 @@
+{
+  "audio_file": "meeting_test.wav",
+  "raw_diarization_segments": 20,
+  "filtered_short_segments": 5,
+  "merged_speaker_turns": 8,
+  "segments": [
+    {
+      "speaker_id": "SPEAKER_00",
+      "start_time": 2.81,
+      "end_time": 5.72,
+      "text": "hôm nay chúng ta hợp đây rà soát tiến độ hệ thống."
+    },
+    {
+      "speaker_id": "SPEAKER_01",
+      "start_time": 8.57,
+      "end_time": 16.52,
+      "text": "phần giao diện đã hoàn thành em đang kiểm tra chức năng tải phai ghi âm và lưu biên bản."
+    },
+    {
+      "speaker_id": "SPEAKER_00",
+      "start_time": 21.58,
+      "end_time": 26.96,
+      "text": "tôi còn chức năng nhận dạng người nói hiện tại đang ở giai đoạn nào."
+    },
+    {
+      "speaker_id": "SPEAKER_01",
+      "start_time": 29.9,
+      "end_time": 36.09,
+      "text": "em đang thử nghiệm mô hình ngôi độ có thể chia bản ghi âm hình các luật nói và gán nhãn người nói."
+    },
+    {
+      "speaker_id": "SPEAKER_00",
+      "start_time": 38.07,
+      "end_time": 42.88,
+      "text": "tốt chúng ta cần kiểm tra kết quả với nhiều đoạn hội thoại tiếng việt trước khi tích hợp."
+    },
+    {
+      "speaker_id": "SPEAKER_01",
+      "start_time": 44.41,
+      "end_time": 47.97,
+      "text": "em sẽ chuẩn bị dữ liệu có hai người nói và đối chiếu với nhau."
+    },
+    {
+      "speaker_id": "SPEAKER_00",
+      "start_time": 49.95,
+      "end_time": 55.67,
+      "text": "hiện hạng hoàn thành bản thử nghiệm là thứ hai tuần tới nhớ lưu lại kết quả kiểm tra."
+    },
+    {
+      "speaker_id": "SPEAKER_01",
+      "start_time": 56.81,
+      "end_time": 58.91,
+      "text": "em sẽ gửi báo cáo chuốt cuộc họp tiếp theo."
+    }
+  ]
+}

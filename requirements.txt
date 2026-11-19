@@ -1,12 +1,22 @@
 # ==============================================================================
-# AI Meeting Intelligence - Dependencies (Khởi tạo ban đầu)
+# AI Meeting Intelligence - Production Dependencies
 # ==============================================================================
 
-# Web Framework
-streamlit>=1.38.0
+# Web Server & REST API
+fastapi>=0.115.0
+uvicorn>=0.32.0
+python-multipart>=0.0.12
 
-# Environment Variable Management
-python-dotenv>=1.0.1
+# Database Driver (PostgreSQL 17)
+psycopg2-binary>=2.9.9
 
-# Data Validation & Schemas (Chuẩn hóa dữ liệu cho AI & API)
+# AI, Speech Recognition & Audio Processing
+torch>=2.4.0
+transformers>=4.45.0
+soundfile>=0.12.1
+scipy>=1.14.0
+numpy>=1.26.0
+
+# Data Validation & Configuration
 pydantic>=2.8.0
+python-dotenv>=1.0.1

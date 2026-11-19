@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản trị Hệ thống &amp; Nhân sự | AI Meeting Studio</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css?v=1794924631" />
+</head>
+
+<body class="bg-[#F8FAFC] text-[#0F172A] min-h-screen flex flex-col">
+
+  <!-- =====================================================================
+       CỔNG ĐĂNG NHẬP QUẢN TRỊ VIÊN
+       ===================================================================== -->
+  <div id="admin-auth-overlay"
+    class="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-8 shadow-xl space-y-6">
+      <div class="text-center space-y-2">
+        <div
+          class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center mx-auto">
+          <i data-lucide="shield-lock" class="w-5 h-5"></i>
+        </div>
+        <span
+          class="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+          Quản trị viên
+        </span>
+        <h1 class="text-xl font-bold text-[#0F172A] tracking-tight">Đăng nhập Cổng Quản trị</h1>
+        <p class="text-xs text-slate-500">
+          Chỉ tài khoản được cấp quyền Quản trị viên mới được phép truy cập khu vực này.
+        </p>
+      </div>
+
+      <!-- Error Alert -->
+      <div id="admin-auth-error"
+        class="hidden rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs font-semibold text-rose-700 flex items-start gap-2">
+        <i data-lucide="shield-alert" class="w-4 h-4 shrink-0 text-rose-600 mt-0.5"></i>
+        <span id="admin-auth-error-text"></span>
+      </div>
+
+      <form onsubmit="event.preventDefault(); submitAdminSignIn();" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tên đăng nhập</label>
+          <input id="admin-login-username" type="text" autocomplete="username" placeholder="Nhập tên đăng nhập"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Mật khẩu</label>
+          <input id="admin-login-password" type="password" autocomplete="current-password" placeholder="••••••••"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+
+        <button id="btn-admin-signin" type="submit"
+          class="w-full py-2.5 px-4 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition">
+          <i data-lucide="key-round" class="w-4 h-4"></i>
+          <span>Đăng nhập Quản trị</span>
+        </button>
+      </form>
+
+      <div class="pt-3 border-t border-slate-100 text-center">
+        <a href="/"
+          class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#0F172A] transition">
+          <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+          <span>Quay về Không gian Làm việc</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       NỘI DUNG QUẢN TRỊ HỆ THỐNG & NHÂN SỰ
+       ===================================================================== -->
+  <div id="admin-protected-shell" class="hidden flex-1 flex flex-col">
+
+    <!-- ENTERPRISE HEADER (DARK SLATE BAR WITH CRISP WHITE TEXT) -->
+    <header class="bg-[#0F172A] border-b border-slate-800 sticky top-0 z-30">
+      <div class="max-w-[1440px] mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div
+            class="w-10 h-10 rounded-xl bg-slate-800 text-white border border-slate-700 flex items-center justify-center">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h1 class="text-base font-bold tracking-tight text-white">
+                Quản trị Hệ thống &amp; Nhân sự
+              </h1>
+              <span
+                class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700">
+                Quản trị viên
+              </span>
+            </div>
+            <p class="text-xs text-slate-300 mt-0.5">
+              Tài khoản đang đăng nhập: <strong id="admin-active-user-label" class="text-white font-semibold">--</strong>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button type="button" onclick="openCreateUserModal()"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-100 text-[#0F172A] shadow-xs transition">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+            <span>Thêm nhân sự</span>
+          </button>
+
+          <a href="/"
+            class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span>Về trang chính</span>
+          </a>
+
+          <button type="button" onclick="logoutAdminPortal()"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-rose-900/50 text-slate-200 hover:text-rose-200 border border-slate-700 hover:border-rose-700 transition">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ADMIN MAIN CONTENT -->
+    <main class="flex-1 max-w-[1440px] w-full mx-auto px-6 py-6 space-y-6">
+
+      <!-- 4 KPI CARDS (ĐỒNG NHẤT MÀU SỐ LIỆU #0F172A) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-medium text-slate-500">Tổng số nhân sự</div>
+            <div id="admin-kpi-total" class="text-2xl font-bold text-[#0F172A] mt-1 font-mono-time">0</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center">
+            <i data-lucide="users" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-medium text-slate-500">Đã thu mẫu giọng nói</div>
+            <div id="admin-kpi-verified" class="text-2xl font-bold text-[#0F172A] mt-1 font-mono-time">0</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center">
+            <i data-lucide="mic" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-medium text-slate-500">Số Quản trị viên</div>
+            <div id="admin-kpi-admins" class="text-2xl font-bold text-[#0F172A] mt-1 font-mono-time">0</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center">
+            <i data-lucide="shield" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-medium text-slate-500">Dung lượng lưu trữ</div>
+            <div id="admin-kpi-storage" class="text-2xl font-bold text-[#0F172A] mt-1 font-mono-time">0 KB</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center">
+            <i data-lucide="hard-drive" class="w-5 h-5"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- DANH SÁCH NHÂN SỰ -->
+      <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <!-- Table Toolbar -->
+        <div class="px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 class="text-base font-bold text-[#0F172A]">
+              Danh sách nhân sự
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Quản lý thông tin tài khoản, chức vụ và mẫu giọng nói của từng thành viên.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="relative">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input id="admin-search-input" type="text" oninput="renderAdminTable()"
+                placeholder="Tìm tên, tài khoản, chức vụ..."
+                class="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 w-64" />
+            </div>
+            <select id="admin-filter-status" onchange="renderAdminTable()"
+              class="text-xs bg-white border border-slate-200 rounded-lg px-3 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400">
+              <option value="">Tất cả trạng thái</option>
+              <option value="verified">Đã thu âm</option>
+              <option value="pending">Chưa thu âm</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Table Content -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr
+                class="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th class="py-3 px-4">Mã / Tài khoản</th>
+                <th class="py-3 px-4">Họ và tên</th>
+                <th class="py-3 px-4">Vai trò</th>
+                <th class="py-3 px-4">Trạng thái giọng nói</th>
+                <th class="py-3 px-4 min-w-[250px]">Mẫu giọng nói đã lưu</th>
+                <th class="py-3 px-4">Ngày đăng ký</th>
+                <th class="py-3 px-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-tbody" class="divide-y divide-slate-200 text-xs">
+              <!-- Populated by admin.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- =====================================================================
+       MODAL: THÊM MỚI HOẶC SỬA NHÂN SỰ & CẬP NHẬT MẪU GIỌNG NÓI
+       ===================================================================== -->
+  <div id="admin-user-modal"
+    class="hidden fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-4 my-8">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div>
+          <h3 id="modal-admin-title" class="text-base font-bold text-[#0F172A]">Thêm nhân sự</h3>
+          <p id="modal-admin-subtitle" class="text-xs text-slate-500 mt-0.5">
+            Nhập thông tin tài khoản, chức vụ và thu âm hoặc tải lên mẫu giọng nói.
+          </p>
+        </div>
+        <button type="button" onclick="closeAdminUserModal()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="modal-profile-id" />
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập *</label>
+          <input id="modal-username" type="text" placeholder="Ví dụ: leminhkhoi"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+          <input id="modal-email" type="email" placeholder="example@gmail.com"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Mật khẩu</label>
+          <input id="modal-password" type="password" placeholder="Mặc định: 123456"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Họ và tên *</label>
+          <input id="modal-name" type="text" placeholder="Ví dụ: Lê Minh Khôi"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Chức vụ / Vai trò *</label>
+          <input id="modal-role" type="text" placeholder="Trưởng dự án, Kỹ sư AI, QA..."
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500" />
+        </div>
+      </div>
+
+      <!-- Quick Role Chips -->
+      <div class="flex flex-wrap gap-1.5">
+        <button type="button" onclick="setModalRole('Trưởng dự án')"
+          class="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Trưởng dự án</button>
+        <button type="button" onclick="setModalRole('Kỹ sư AI')"
+          class="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Kỹ sư AI</button>
+        <button type="button" onclick="setModalRole('Backend Developer')"
+          class="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Backend Developer</button>
+        <button type="button" onclick="setModalRole('Frontend Developer')"
+          class="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">Frontend Developer</button>
+        <button type="button" onclick="setModalRole('QA/Tester')"
+          class="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">QA/Tester</button>
+      </div>
+
+      <div class="pt-1">
+        <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+          <input id="modal-is-admin" type="checkbox" class="rounded border-slate-300 accent-slate-900 focus:ring-slate-500" />
+          <span>Cấp quyền Quản trị viên</span>
+        </label>
+      </div>
+
+      <!-- Khung Thu âm Mẫu giọng nói -->
+      <div class="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-[#0F172A] flex items-center gap-1.5">
+            <i data-lucide="mic" class="w-4 h-4 text-slate-600"></i>
+            Thu âm hoặc cập nhật mẫu giọng nói
+          </span>
+          <span id="modal-recorder-timer"
+            class="font-mono-time text-xs font-semibold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
+            00:00 / 00:30
+          </span>
+        </div>
+
+        <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+          <div id="modal-level-bar" class="bg-emerald-600 h-full w-0 transition-all duration-75"></div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button id="btn-modal-record" type="button" onclick="startModalVoiceRecording()"
+            class="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-[#0F172A] border border-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="circle-dot" class="w-3.5 h-3.5 text-rose-600"></i>
+            <span>Thu âm trực tiếp</span>
+          </button>
+          <button id="btn-modal-stop" type="button" onclick="stopModalVoiceRecording()" disabled
+            class="py-2 px-4 rounded-xl bg-[#0F172A] hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="square" class="w-3.5 h-3.5"></i>
+            <span>Dừng</span>
+          </button>
+        </div>
+
+        <div id="modal-preview-box" class="hidden pt-2 border-t border-slate-200 space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span id="modal-preview-label" class="font-semibold text-emerald-700">Đã sẵn sàng mẫu giọng nói mới</span>
+            <button type="button" onclick="clearModalVoiceAudio()" class="text-rose-600 hover:underline font-medium">Xóa bản ghi</button>
+          </div>
+          <audio id="modal-preview-audio" controls class="w-full h-8"></audio>
+        </div>
+
+        <div class="pt-2 border-t border-slate-200">
+          <label class="block text-[11px] text-slate-500 mb-1.5">
+            Hoặc tải tệp âm thanh mẫu giọng nói từ máy tính:
+          </label>
+          <input id="modal-audio-file" type="file" accept=".wav,audio/wav" onchange="onModalAudioFileSelected(this)"
+            class="w-full text-xs text-slate-600 file:mr-2.5 file:py-1 file:px-2.5 file:rounded-lg file:border file:border-slate-200 file:text-xs file:font-semibold file:bg-white file:text-slate-700 hover:file:bg-slate-50" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-2">
+        <button type="button" onclick="closeAdminUserModal()"
+          class="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition">
+          Hủy
+        </button>
+        <button id="btn-modal-save" type="button" onclick="submitAdminUserModal()"
+          class="px-5 py-2 rounded-xl text-xs font-semibold bg-[#0F172A] hover:bg-slate-800 text-white transition">
+          Lưu hồ sơ nhân sự
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+
+  <!-- Admin Script -->
+  <script src="/static/js/admin.js?v=20261121"></script>
+</body>
+
+</html>

@@ -1,29 +1,30 @@
 """
-Module quản lý cấu hình tập trung cho ứng dụng AI Meeting Intelligence.
-Đọc các biến môi trường từ file .env nếu có.
+Module quan ly cau hinh tap trung cho ung dung AI Meeting Intelligence.
+Doc cac bien moi truong tu file .env neu co.
 """
-import os
+
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Xác định đường dẫn gốc của dự án (Project Root)
+# Xac dinh duong dan goc cua du an (Project Root)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Nạp file .env từ thư mục gốc
+# Nap file .env tu thu muc goc
 load_dotenv(BASE_DIR / ".env")
 
-# Cấu hình chung
+# Cau hinh chung
 APP_NAME = "AI Meeting Intelligence & Task Management System"
-APP_VERSION = "0.1.0"
+APP_VERSION = "2.2.0"
 
-# Cấu hình thư mục lưu trữ dữ liệu
+# Cau hinh thu muc luu tru du lieu
 DATA_DIR = BASE_DIR / "data"
 SAMPLES_DIR = DATA_DIR / "samples"
-EXPORTS_DIR = DATA_DIR / "exports"
+UPLOADS_DIR = DATA_DIR / "uploads"
+VOICEPRINTS_DIR = DATA_DIR / "voiceprints"
 DB_PATH = DATA_DIR / "meetings.db"
 
-# Đảm bảo các thư mục tồn tại khi ứng dụng khởi chạy
+# Dam bao cac thu muc ton tai khi ung dung khoi chay
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+VOICEPRINTS_DIR.mkdir(parents=True, exist_ok=True)

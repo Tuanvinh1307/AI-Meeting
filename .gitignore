@@ -1,20 +1,17 @@
 # ==============================================================================
-# Python Virtual Environments
+# Python Virtual Environments, Bytecode & Test Caches
 # ==============================================================================
 .venv/
 venv/
 ENV/
 env/
-
-# ==============================================================================
-# Byte-compiled / optimized / DLL files
-# ==============================================================================
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 
 # ==============================================================================
-# Sensitive Environment Variables & API Keys
+# Sensitive Environment Variables & Credentials
 # ==============================================================================
 .env
 .env.local
@@ -22,24 +19,29 @@ __pycache__/
 *.pem
 
 # ==============================================================================
-# Local Data & Media Files (Tránh đẩy dữ liệu cuộc họp hoặc file nặng lên Git)
+# Local Databases & Uploaded Media (Keep folder structure via .gitkeep)
 # ==============================================================================
-data/samples/*
-!data/samples/.gitkeep
-data/exports/*
-!data/exports/.gitkeep
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
+data/uploads/*
+!data/uploads/.gitkeep
+data/voiceprints/*
+!data/voiceprints/.gitkeep
 *.mp3
-*.wav
 *.m4a
 *.mp4
 
 # ==============================================================================
-# IDE & System Files
+# IDE & OS Metadata
 # ==============================================================================
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 .DS_Store
 Thumbs.db
 
+# Runtime data
+data/uploads/
+data/voiceprints/

@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản lý Biên bản Cuộc họp &amp; Công việc</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex overflow-x-hidden">
+
+  <!-- =====================================================================
+       CỔNG ĐĂNG NHẬP & TẠO TÀI KHOẢN
+       ===================================================================== -->
+  <div id="auth-gate-overlay" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white border border-slate-200/90 rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6 my-8">
+      <!-- Brand Header -->
+      <div class="text-center space-y-2">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30 mx-auto">
+          <i data-lucide="audio-waveform" class="w-6 h-6"></i>
+        </div>
+        <h1 class="text-xl font-bold text-slate-900 tracking-tight">Quản lý Cuộc họp</h1>
+        <p class="text-xs text-slate-500">
+          Hệ thống quản lý biên bản cuộc họp, ghi âm hội thoại và theo dõi công việc
+        </p>
+      </div>
+
+      <!-- Segmented 2-Tab Switcher -->
+      <div class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/70">
+        <button
+          id="tab-btn-login"
+          type="button"
+          onclick="switchAuthMode('login')"
+          class="py-2 text-xs font-semibold rounded-lg transition bg-white text-slate-900 shadow-xs"
+        >
+          Đăng nhập
+        </button>
+        <button
+          id="tab-btn-register"
+          type="button"
+          onclick="switchAuthMode('register')"
+          class="py-2 text-xs font-semibold rounded-lg transition text-slate-500 hover:text-slate-800"
+        >
+          Tạo tài khoản mới
+        </button>
+      </div>
+
+      <!-- Error Alert Box -->
+      <div id="auth-error-box" class="hidden rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs font-medium text-rose-700 flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 text-rose-600"></i>
+        <span id="auth-error-text"></span>
+      </div>
+
+      <!-- TAB 1: FORM ĐĂNG NHẬP -->
+      <form id="form-auth-login" onsubmit="event.preventDefault(); submitLoginForm();" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tên đăng nhập</label>
+          <input
+            id="login-username-input"
+            type="text"
+            autocomplete="username"
+            placeholder="Nhập tên đăng nhập của bạn"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Mật khẩu</label>
+          <input
+            id="login-password-input"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <button
+          id="btn-submit-login"
+          type="submit"
+          class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition"
+        >
+          <span>Đăng nhập</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+      <!-- TAB 2: FORM TẠO TÀI KHOẢN MỚI -->
+      <form id="form-auth-register" onsubmit="event.preventDefault(); submitRegisterForm();" class="hidden space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tên đăng nhập *</label>
+          <input
+            id="reg-username-input"
+            type="text"
+            autocomplete="username"
+            placeholder="Ví dụ: leminhkhoi"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Email *</label>
+          <input
+            id="reg-email-input"
+            type="email"
+            autocomplete="email"
+            placeholder="example@gmail.com"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Mật khẩu *</label>
+          <input
+            id="reg-password-input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Tối thiểu 4 ký tự"
+            required
+            class="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <button
+          id="btn-submit-register"
+          type="submit"
+          class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition"
+        >
+          <span>Tiếp tục thiết lập hồ sơ</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       THIẾT LẬP HỒ SƠ CÁ NHÂN & THU ÂM MẪU GIỌNG NÓI
+       ===================================================================== -->
+  <div id="onboarding-gate-overlay" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white border border-slate-200 rounded-3xl max-w-3xl w-full p-8 shadow-2xl space-y-6 my-8">
+      <!-- Header -->
+      <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <i data-lucide="mic" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Thiết lập hồ sơ cá nhân
+              </span>
+              <span id="onboard-username-tag" class="text-xs font-mono-time text-indigo-600 font-semibold">@user</span>
+            </div>
+            <h2 class="text-xl font-bold text-slate-900 mt-1">Khai báo thông tin &amp; Thu âm mẫu giọng nói</h2>
+            <p class="text-xs text-slate-500">
+              Mẫu giọng nói giúp hệ thống nhận diện đúng tên và chức vụ của bạn trong các cuộc họp.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick="logoutCurrentUser()"
+          class="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
+        >
+          Đăng xuất
+        </button>
+      </div>
+
+      <!-- STEP 1: HỌ TÊN & VAI TRÒ -->
+      <div class="space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+          <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">Thông tin cá nhân &amp; Vai trò</h3>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-8">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Họ và tên đầy đủ <span class="text-rose-500">*</span></label>
+            <input
+              id="onboard-name"
+              type="text"
+              placeholder="Ví dụ: Lê Minh Khôi"
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Vai trò <span class="text-rose-500">*</span></label>
+            <input
+              id="onboard-role"
+              type="text"
+              placeholder="Trưởng dự án, Kỹ sư phần mềm..."
+              class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        <!-- Quick Role Pills -->
+        <div class="flex flex-wrap items-center gap-1.5 pl-8">
+          <span class="text-[11px] text-slate-400 mr-1">Gợi ý chức vụ:</span>
+          <button type="button" onclick="setOnboardRole('Trưởng dự án')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 font-medium text-slate-700 transition">Trưởng dự án</button>
+          <button type="button" onclick="setOnboardRole('Kỹ sư phần mềm')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 font-medium text-slate-700 transition">Kỹ sư phần mềm</button>
+          <button type="button" onclick="setOnboardRole('Chuyên viên phân tích')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 font-medium text-slate-700 transition">Chuyên viên phân tích</button>
+          <button type="button" onclick="setOnboardRole('Kiểm thử viên')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 font-medium text-slate-700 transition">Kiểm thử viên</button>
+          <button type="button" onclick="setOnboardRole('Trưởng nhóm')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 font-medium text-slate-700 transition">Trưởng nhóm</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: THU ÂM MẪU GIỌNG CÁ NHÂN -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+            <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">Thu âm mẫu giọng nói cá nhân</h3>
+          </div>
+          <span id="onboard-recorder-timer" class="font-mono-time text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800">
+            00:00 / 00:30
+          </span>
+        </div>
+
+        <div class="pl-8 space-y-3">
+          <div class="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-4 space-y-3">
+            <div class="text-xs text-slate-700 leading-relaxed bg-white border border-indigo-100 rounded-xl p-3.5">
+              <div class="font-bold text-indigo-950 mb-1 flex items-center gap-1.5">
+                <i data-lucide="book-open" class="w-3.5 h-3.5 text-indigo-600"></i>
+                Đoạn văn bản gợi ý để đọc thu âm khoảng 15 giây:
+              </div>
+              <p class="italic text-slate-700">
+                "Xin chào các thành viên trong nhóm. Tôi đang thực hiện thu âm mẫu giọng nói cá nhân để hệ thống nhận diện đúng tên và chức vụ của tôi trong các cuộc họp dự án sắp tới."
+              </p>
+            </div>
+
+            <!-- Waveform Level Bar -->
+            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+              <div id="onboard-level-bar" class="bg-emerald-500 h-full w-0 transition-all duration-75"></div>
+            </div>
+
+            <!-- Record Buttons -->
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                id="btn-onboard-record"
+                type="button"
+                onclick="startOnboardingRecording()"
+                class="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition"
+              >
+                <i data-lucide="mic" class="w-4 h-4"></i>
+                <span>Bắt đầu thu âm</span>
+              </button>
+              <button
+                id="btn-onboard-stop"
+                type="button"
+                onclick="stopOnboardingRecording()"
+                disabled
+                class="py-2.5 px-5 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <i data-lucide="square" class="w-3.5 h-3.5"></i>
+                <span>Dừng thu</span>
+              </button>
+            </div>
+
+            <!-- Recorded Audio Preview -->
+            <div id="onboard-preview-box" class="hidden pt-2 border-t border-indigo-200/60 space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <span id="onboard-preview-status" class="font-bold text-emerald-700">Đã sẵn sàng mẫu giọng nói</span>
+                <button type="button" onclick="clearOnboardingAudio()" class="text-rose-600 hover:underline font-medium">Xóa thu lại</button>
+              </div>
+              <audio id="onboard-preview-audio" controls class="w-full h-8"></audio>
+            </div>
+
+            <!-- Fallback File Upload -->
+            <div class="pt-2 border-t border-indigo-200/60 flex flex-wrap items-center justify-between gap-2">
+              <label class="text-[11px] font-medium text-slate-600">
+                Hoặc tải lên tệp âm thanh <code class="font-mono-time">.wav</code> từ máy tính:
+              </label>
+              <input
+                id="onboard-file-input"
+                type="file"
+                accept=".wav,audio/wav"
+                onchange="onSelectOnboardingFile(this)"
+                class="text-xs text-slate-600 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-white file:text-indigo-700 hover:file:bg-indigo-50"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3: HOÀN TẤT -->
+      <div class="pl-8 pt-2">
+        <button
+          id="btn-complete-onboarding"
+          type="button"
+          onclick="submitMandatoryOnboarding()"
+          class="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/20 transition"
+        >
+          <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          <span>Hoàn tất và bắt đầu sử dụng</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       SIDEBAR CỐ ĐỊNH (#0F172A) — 3 MỤC CHÍNH
+       ===================================================================== -->
+  <aside class="w-72 bg-[#0F172A] text-slate-200 flex flex-col fixed inset-y-0 left-0 z-30 border-r border-slate-800/80 select-none">
+    <!-- Brand Header -->
+    <div class="px-5 py-5 border-b border-slate-800/80 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+        <i data-lucide="audio-waveform" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-sm font-semibold tracking-tight text-white">
+          Quản lý Cuộc họp
+        </div>
+      </div>
+    </div>
+
+    <!-- Primary Navigation -->
+    <div class="px-3 py-4 space-y-1">
+      <div class="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        DANH MỤC
+      </div>
+      <div id="nav-workspace" onclick="switchTab('workspace')" class="nav-item active">
+        <i data-lucide="file-audio-2" class="w-4 h-4 shrink-0"></i>
+        <span class="truncate">Biên bản cuộc họp</span>
+      </div>
+      <div id="nav-studio" onclick="switchTab('studio')" class="nav-item">
+        <i data-lucide="upload" class="w-4 h-4 shrink-0"></i>
+        <span class="truncate">Tải lên ghi âm</span>
+      </div>
+      <div id="nav-tasks" onclick="switchTab('tasks')" class="nav-item justify-between">
+        <div class="flex items-center gap-3 truncate">
+          <i data-lucide="check-square" class="w-4 h-4 shrink-0"></i>
+          <span class="truncate">Quản lý công việc</span>
+        </div>
+        <span id="sidebar-pending-badge" class="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300">0</span>
+      </div>
+    </div>
+
+    <!-- Sidebar Quick Meeting History -->
+    <div class="px-3 pt-2 pb-2 flex items-center justify-between border-t border-slate-800/80">
+      <span class="px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">CUỘC HỌP CỦA TÔI</span>
+      <button onclick="switchTab('studio')" title="Tạo cuộc họp mới" class="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition">
+        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+    <div id="sidebar-meetings-list" class="flex-1 overflow-y-auto px-3 space-y-1 pb-3">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- Current Logged-In User Identity Card -->
+    <div class="p-3.5 border-t border-slate-800 bg-slate-900/90 space-y-2.5">
+      <div class="flex items-center gap-2.5">
+        <div id="sidebar-user-avatar" class="w-9 h-9 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+          --
+        </div>
+        <div class="min-w-0 flex-1">
+          <div id="sidebar-user-name" class="text-xs font-bold text-white truncate">Chưa đăng nhập</div>
+          <div id="sidebar-user-role" class="text-[11px] text-slate-400 truncate">--</div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span class="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          Đã xác thực giọng nói
+        </span>
+
+        <!-- Nút Quản trị hệ thống: Chỉ hiển thị cho tài khoản Quản trị viên -->
+        <a
+          id="sidebar-admin-link"
+          href="/admin"
+          class="hidden text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 items-center gap-1 transition"
+          title="Mở trang Quản trị Hệ thống"
+        >
+          <i data-lucide="shield" class="w-3 h-3"></i>
+          <span>Quản trị hệ thống</span>
+        </a>
+      </div>
+
+      <button
+        type="button"
+        onclick="logoutCurrentUser()"
+        class="w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center justify-center gap-1.5 transition"
+      >
+        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+        <span>Đăng xuất</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- =====================================================================
+       MAIN CONTENT AREA
+       ===================================================================== -->
+  <div class="flex-1 ml-72 flex flex-col min-h-screen">
+
+    <!-- ===================================================================
+         STICKY AUDIO PLAYER BAR
+         =================================================================== -->
+    <div id="sticky-audio-bar" class="hidden sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm px-8 py-2.5">
+      <div class="max-w-[1440px] mx-auto flex flex-wrap items-center gap-4">
+        <audio id="global-audio" preload="metadata" class="hidden"></audio>
+
+        <!-- Play / Pause Button -->
+        <button id="btn-audio-toggle" onclick="toggleAudioPlayback()" class="w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-sm transition shrink-0">
+          <i id="icon-audio-play" data-lucide="play" class="w-4 h-4 ml-0.5"></i>
+        </button>
+
+        <!-- Time Counter -->
+        <div class="text-xs font-mono-time text-slate-600 shrink-0 min-w-[92px]">
+          <span id="audio-current-time" class="font-semibold text-slate-900">00:00</span>
+          <span class="text-slate-400"> / </span>
+          <span id="audio-total-time">00:00</span>
+        </div>
+
+        <!-- Scrubber Range -->
+        <div class="flex-1 flex items-center gap-3 min-w-[200px]">
+          <input
+            id="audio-scrubber"
+            type="range"
+            min="0"
+            max="100"
+            step="0.05"
+            value="0"
+            oninput="seekAudioFromScrubber(this.value)"
+            class="audio-scrubber w-full"
+          />
+        </div>
+
+        <!-- Active Segment Indicator Badge -->
+        <div id="audio-segment-indicator" class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium flex items-center gap-1.5 max-w-xs truncate">
+          <i data-lucide="volume-2" class="w-3.5 h-3.5 text-indigo-600 shrink-0"></i>
+          <span id="audio-segment-label" class="truncate">Bấm vào từng câu thoại để nghe lại đoạn ghi âm</span>
+        </div>
+
+        <!-- Speed Control -->
+        <button id="btn-audio-speed" onclick="cycleAudioSpeed()" class="text-xs font-mono-time font-semibold px-2.5 py-1 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 transition">
+          1.0x
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         VIEW 1: BIÊN BẢN CUỘC HỌP
+         =================================================================== -->
+    <main id="view-workspace" class="flex-1 px-8 py-6 max-w-[1440px] w-full mx-auto view-animate">
+      <!-- Empty State (Hiển thị khi tài khoản chưa có cuộc họp nào) -->
+      <div id="workspace-empty-state" class="hidden bg-white border border-slate-200 rounded-2xl p-12 text-center max-w-xl mx-auto mt-10 space-y-4">
+        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center mx-auto">
+          <i data-lucide="file-audio-2" class="w-6 h-6"></i>
+        </div>
+        <h2 class="text-lg font-bold text-slate-900">Bạn chưa có biên bản cuộc họp nào</h2>
+        <p class="text-sm text-slate-500">
+          Hãy tải lên file ghi âm cuộc họp đầu tiên để hệ thống chuyển thành văn bản, tóm tắt nội dung và trích xuất công việc.
+        </p>
+        <button
+          type="button"
+          onclick="switchTab('studio')"
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition"
+        >
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Tải lên file ghi âm đầu tiên</span>
+        </button>
+      </div>
+
+      <!-- Content Shell (Hiển thị khi đã có cuộc họp) -->
+      <div id="workspace-content-shell" class="hidden">
+        <!-- Meeting Header Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-slate-200">
+          <div class="flex items-center gap-3 flex-wrap">
+            <label for="meeting-selector" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Biên bản:</label>
+            <select
+              id="meeting-selector"
+              onchange="selectMeeting(this.value)"
+              class="bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[280px]"
+            ></select>
+            <span id="meeting-date-badge" class="text-xs font-mono-time px-2.5 py-1 rounded-md bg-slate-100 text-slate-600"></span>
+          </div>
+
+          <div class="flex items-center gap-2.5">
+            <button
+              id="btn-reanalyze"
+              onclick="reanalyzeCurrentMeeting()"
+              class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition"
+            >
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Tóm tắt lại</span>
+            </button>
+            <button
+              onclick="exportMeetingMarkdown()"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 transition"
+            >
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Tải biên bản</span>
+            </button>
+            <button
+              onclick="deleteCurrentMeeting()"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 transition"
+            >
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Xóa</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Detected Speakers Bar -->
+        <div class="py-3.5 border-b border-slate-200/80 flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mr-1">
+              <i data-lucide="users" class="w-3.5 h-3.5 text-indigo-600"></i>
+              Người tham gia:
+            </span>
+            <div id="workspace-speakers-bar" class="flex items-center gap-2 flex-wrap">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 2-COLUMN WORKSPACE -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6 items-start">
+
+          <!-- CỘT TRÁI (5/12): TÓM TẮT NỘI DUNG, KẾT LUẬN CHÍNH & CÔNG VIỆC -->
+          <div class="lg:col-span-5 space-y-7">
+
+            <!-- Summary Section -->
+            <section>
+              <div class="flex items-center gap-2 mb-2.5">
+                <i data-lucide="file-text" class="w-4 h-4 text-indigo-600"></i>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">TÓM TẮT NỘI DUNG</h2>
+              </div>
+              <div id="workspace-summary" class="text-sm leading-relaxed text-slate-700 bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs">
+                Đang tải nội dung tóm tắt...
+              </div>
+            </section>
+
+            <!-- Key Decisions Section -->
+            <section>
+              <div class="flex items-center justify-between mb-2.5">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
+                  <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">KẾT LUẬN CHÍNH</h2>
+                </div>
+                <span id="workspace-decisions-count" class="text-xs font-mono-time text-slate-400">0</span>
+              </div>
+              <ul id="workspace-decisions" class="space-y-2">
+                <!-- Populated by JS -->
+              </ul>
+            </section>
+
+            <!-- Tasks Section -->
+            <section>
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="check-square" class="w-4 h-4 text-indigo-600"></i>
+                  <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">CÔNG VIỆC ĐƯỢC GIAO</h2>
+                </div>
+                <span id="workspace-tasks-count" class="text-xs font-mono-time px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">0 công việc</span>
+              </div>
+              <div id="workspace-tasks-list" class="space-y-3">
+                <!-- Populated by JS -->
+              </div>
+            </section>
+          </div>
+
+          <!-- CỘT PHẢI (7/12): NỘI DUNG CUỘC HỌP -->
+          <div class="lg:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-2xs">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100">
+              <div>
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <i data-lucide="messages-square" class="w-4 h-4 text-indigo-600"></i>
+                  Nội dung cuộc họp
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Bấm vào từng câu thoại để nghe lại đoạn ghi âm tương ứng.
+                </p>
+              </div>
+              <div class="relative">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input
+                  id="transcript-search"
+                  type="text"
+                  oninput="filterTranscriptStream()"
+                  placeholder="Tìm từ khóa hoặc người nói..."
+                  class="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
+                />
+              </div>
+            </div>
+
+            <div id="workspace-transcript-stream" class="space-y-1 max-h-[760px] overflow-y-auto pr-1">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <!-- ===================================================================
+         VIEW 2: TẢI LÊN GHI ÂM
+         =================================================================== -->
+    <main id="view-studio" class="hidden flex-1 px-8 py-6 max-w-3xl w-full mx-auto view-animate">
+      <div class="mb-6">
+        <h1 class="text-xl font-bold text-slate-900">Tải lên file ghi âm cuộc họp</h1>
+        <p class="text-sm text-slate-500 mt-1">
+          Tải lên file ghi âm (.wav) để tự động chuyển thành văn bản, nhận diện người nói và trích xuất công việc.
+        </p>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 space-y-5">
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Tiêu đề cuộc họp
+          </label>
+          <input
+            id="upload-title"
+            type="text"
+            value="Họp rà soát tiến độ dự án"
+            placeholder="Nhập tiêu đề cuộc họp..."
+            class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <!-- Audio Dropzone -->
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            File ghi âm cuộc họp
+          </label>
+          <label
+            for="upload-audio-file"
+            class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-xl p-8 cursor-pointer bg-slate-50/60 hover:bg-indigo-50/30 transition text-center"
+          >
+            <i data-lucide="upload-cloud" class="w-8 h-8 text-indigo-600 mb-2"></i>
+            <span id="upload-audio-filename" class="text-sm font-semibold text-slate-800">
+              Kéo thả file ghi âm vào đây hoặc bấm để chọn file
+            </span>
+            <input id="upload-audio-file" type="file" accept=".wav,audio/wav" class="hidden" onchange="onSelectUploadAudio(this)" />
+          </label>
+        </div>
+
+        <!-- Optional Speaker File -->
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Tệp phân chia người nói (tùy chọn)
+          </label>
+          <input
+            id="upload-diarization-file"
+            type="file"
+            accept=".json,application/json"
+            class="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+          />
+        </div>
+
+        <!-- Options -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <label class="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+            <input id="upload-use-sample" type="checkbox" class="rounded text-indigo-600 focus:ring-indigo-500" />
+            <span>Dùng file ghi âm mẫu có sẵn</span>
+          </label>
+          <label class="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+            <input id="upload-auto-analyze" type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500" />
+            <span>Tự động tóm tắt và trích xuất công việc</span>
+          </label>
+        </div>
+
+        <!-- Submit Button & Progress -->
+        <button
+          id="btn-run-studio"
+          onclick="submitMeetingUpload()"
+          class="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition"
+        >
+          <i data-lucide="file-audio" class="w-4 h-4"></i>
+          <span>Xử lý file ghi âm</span>
+        </button>
+
+        <div id="studio-progress-box" class="hidden rounded-xl bg-indigo-50/80 border border-indigo-200 p-4 text-xs text-indigo-900 space-y-2">
+          <div class="flex items-center gap-2 font-semibold">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-indigo-600"></i>
+            <span id="studio-progress-text">Đang chuyển đổi ghi âm và tổng hợp biên bản...</span>
+          </div>
+          <div class="w-full bg-indigo-200/70 h-1.5 rounded-full overflow-hidden">
+            <div class="bg-indigo-600 h-full w-2/3 animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===================================================================
+         VIEW 3: QUẢN LÝ CÔNG VIỆC
+         =================================================================== -->
+    <main id="view-tasks" class="hidden flex-1 px-8 py-6 max-w-[1440px] w-full mx-auto view-animate">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 class="text-xl font-bold text-slate-900">Danh sách công việc</h1>
+          <p class="text-sm text-slate-500 mt-0.5">
+            Theo dõi tiến độ, xác nhận công việc và nghe lại đoạn ghi âm giao việc.
+          </p>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex flex-wrap items-center gap-3">
+          <select id="filter-confirmation" onchange="loadActionCenterTasks()" class="text-xs font-medium bg-white border border-slate-300 rounded-lg px-3 py-2">
+            <option value="">Tất cả trạng thái</option>
+            <option value="Chờ duyệt">Chờ xác nhận</option>
+            <option value="Đã duyệt">Đã xác nhận</option>
+            <option value="Đã từ chối">Đã từ chối</option>
+          </select>
+          <select id="filter-status" onchange="loadActionCenterTasks()" class="text-xs font-medium bg-white border border-slate-300 rounded-lg px-3 py-2">
+            <option value="">Tất cả tiến độ</option>
+            <option value="Cần làm">Cần làm</option>
+            <option value="Đang làm">Đang làm</option>
+            <option value="Hoàn thành">Hoàn thành</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="action-center-list" class="space-y-3">
+        <!-- Populated by JS -->
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+
+  <!-- Application Script -->
+  <script src="/static/js/app.js?v=20261123"></script>
+</body>
+</html>
