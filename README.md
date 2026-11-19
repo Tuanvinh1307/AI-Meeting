@@ -45,7 +45,7 @@ AI Meeting Intelligence/
 │   ├── test_asr_integration.py
 │   ├── test_database_crud.py
 │   └── test_llm_and_hitl.py
-├── web/                             # Giao diện Web Doanh nghiệp
+├── web/                             # Giao diện Web
 │   ├── css/
 │   │   └── styles.css
 │   ├── js/
