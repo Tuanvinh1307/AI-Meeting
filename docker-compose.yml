@@ -41,11 +41,20 @@ services:
     environment:
       DATABASE_URL: postgresql://aimeeting:aimeeting123@db:5432/aimeeting_db
       HF_HOME: /root/.cache/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
+      TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD: "1"
     volumes:
       - ./data:/app/data
       - hf_cache:/root/.cache/huggingface
     ports:
       - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   pgdata:

@@ -12,13 +12,17 @@ bcrypt>=4.2.0
 # Database Driver (PostgreSQL 17)
 psycopg2-binary>=2.9.9
 
-# AI, Speech Recognition & Audio Processing
-torch>=2.4.0
+# AI, Speech Recognition, Speaker Diarization (GTX 1060 sm_61 / CUDA 12.4) & LangGraph
+torch==2.6.0
+torchaudio==2.6.0
+pyannote.audio==3.3.2
 transformers>=4.45.0
 soundfile>=0.12.1
 scipy>=1.14.0
 numpy>=1.26.0
+langgraph>=0.2.0
 
 # Data Validation & Configuration
 pydantic>=2.8.0
 python-dotenv>=1.0.1
+matplotlib
