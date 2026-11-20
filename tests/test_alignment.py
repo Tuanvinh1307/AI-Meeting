@@ -22,12 +22,12 @@ from pathlib import Path
 from typing import Dict
 
 from config.settings import BASE_DIR, DB_PATH
-from src.ai.alignment import (
+from src.core.ai.asr.phowhisper import PhoWhisperASR
+from src.core.ai.diarization.alignment import (
     align_segments_by_overlap,
     clean_and_merge_diarization_turns,
     load_diarization_segments,
 )
-from src.ai.transcription import PhoWhisperASR
 from src.schemas.meeting import MeetingAnalysis, TranscriptSegment
 from src.services.meeting_service import MeetingService
 

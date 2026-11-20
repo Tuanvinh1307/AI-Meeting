@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Dict
 
 from config.settings import BASE_DIR, DB_PATH
-from src.ai.llm import MeetingLLMAnalyzer, validate_and_ground_tasks
-from src.ai.transcription import PhoWhisperASR
+from src.core.ai.asr.phowhisper import PhoWhisperASR
+from src.core.ai.llm import MeetingLLMAnalyzer, validate_and_ground_tasks
 from src.schemas.meeting import TranscriptSegment
 from src.schemas.task import TaskConfirmationStatus, TaskPriority, TaskStatus
 from src.services.meeting_service import MeetingService

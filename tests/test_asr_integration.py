@@ -15,7 +15,7 @@ import sqlite3
 import time
 from pathlib import Path
 from config.settings import BASE_DIR, DB_PATH
-from src.ai.transcription import PhoWhisperASR
+from src.core.ai.asr.phowhisper import PhoWhisperASR
 from src.services.meeting_service import MeetingService
 from src.schemas.meeting import MeetingAnalysis, TranscriptSegment
 

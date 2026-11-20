@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 
 from config.settings import BASE_DIR
-from src.ai.transcription.phowhisper import PhoWhisperASR
+from src.core.ai.asr.phowhisper import PhoWhisperASR
 from src.schemas.meeting import MeetingAnalysis, TranscriptSegment
 from src.schemas.task import TaskConfirmationStatus, TaskItem, TaskPriority, TaskStatus
 from src.db.connection import get_db_connection, init_db
