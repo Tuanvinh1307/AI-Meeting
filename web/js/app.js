@@ -847,11 +847,81 @@ function renderWorkspaceSpeakersBar(detail) {
     .join("");
 }
 
+function renderSummaryInlineBold(escapedText) {
+  return escapedText.replace(
+    /\*\*(.+?)\*\*/g,
+    '<strong class="font-semibold text-slate-900">$1</strong>'
+  );
+}
+
+function splitSummaryIntoItems(rawSummary) {
+  const normalized = String(rawSummary || "")
+    .replace(/\\n/g, "\n")
+    .trim();
+  if (!normalized) {
+    return { isList: false, items: [], text: "" };
+  }
+
+  const bulletPrefixRe = /^(?:[-•]\s+|\*(?!\*)\s+)/;
+
+  // Tách các ý gạch đầu dòng bị dính liền trên cùng 1 dòng:
+  // 1) Sau dấu kết câu (. ! ? ;) theo sau bởi - / • / *
+  // 2) Hoặc dính liền kiểu " - " / " • " không có dấu chấm phía trước
+  let separated = normalized
+    .replace(/([.!?;])\s+(?=(?:[-•]\s+|\*(?!\*)\s+))/g, "$1\n")
+    .replace(/(\S)\s+(?=[-•]\s+(?:\*\*|[A-ZÀ-Ỹ]))/g, "$1\n");
+
+  if (bulletPrefixRe.test(separated) && !/\r?\n/.test(separated)) {
+    separated = separated.replace(/(\S)\s+(?=[-•]\s+)/g, "$1\n");
+  }
+
+  const lines = separated
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const hasBulletPrefix = lines.some((line) => bulletPrefixRe.test(line));
+  if (lines.length > 1 || hasBulletPrefix) {
+    const items = lines
+      .map((line) => line.replace(bulletPrefixRe, "").trim())
+      .filter(Boolean);
+    if (items.length > 0) {
+      return { isList: true, items, text: normalized };
+    }
+  }
+
+  return { isList: false, items: [], text: normalized };
+}
+
+function formatSummaryHtml(rawSummary) {
+  const parsed = splitSummaryIntoItems(rawSummary);
+  if (!parsed.text) {
+    return `<p class="text-sm text-slate-400 italic m-0">Chưa có bản tóm tắt. Hãy bấm 'Tóm tắt lại'.</p>`;
+  }
+
+  if (parsed.isList) {
+    const itemsHtml = parsed.items
+      .map((item) => `<li>${renderSummaryInlineBold(escapeHtml(item))}</li>`)
+      .join("");
+    return `<ul class="summary-bullet-list list-disc pl-5 m-0 text-sm text-slate-700 leading-relaxed">${itemsHtml}</ul>`;
+  }
+
+  return `<p class="text-sm text-slate-700 leading-relaxed m-0">${renderSummaryInlineBold(escapeHtml(parsed.text))}</p>`;
+}
+
+function formatSummaryMarkdown(rawSummary) {
+  const parsed = splitSummaryIntoItems(rawSummary);
+  if (!parsed.text) return "";
+  if (parsed.isList) {
+    return parsed.items.map((item) => `- ${item}`).join("\n");
+  }
+  return parsed.text;
+}
+
 function renderWorkspaceSummaryAndDecisions(detail) {
   const summaryEl = document.getElementById("workspace-summary");
   if (summaryEl) {
-    summaryEl.textContent =
-      detail.summary || "Chưa có bản tóm tắt. Hãy bấm 'Tóm tắt lại'.";
+    summaryEl.innerHTML = formatSummaryHtml(detail.summary);
   }
 
   const decisions = detail.key_decisions || [];
@@ -1228,7 +1298,7 @@ function exportMeetingMarkdown() {
     `- **Ngày họp:** ${m.meeting_date || ""}`,
     ``,
     `## 1. Tóm tắt nội dung`,
-    m.summary || "",
+    formatSummaryMarkdown(m.summary),
     ``,
     `## 2. Kết luận chính`,
     ...(m.key_decisions || []).map((d) => `- ${d}`),
