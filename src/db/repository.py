@@ -868,3 +868,7 @@ class SpeakerProfileRepository:
                 conn.rollback()
                 logger.error("Loi khi xoa speaker_profile id=%d: %s", profile_id, e, exc_info=True)
                 raise
+
+
+# Alias tuong thich
+SpeakerRepository = SpeakerProfileRepository

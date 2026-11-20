@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse
 
 from config.settings import BASE_DIR
-from src.auth.security import hash_password, require_admin, require_admin_audio
+from src.core.security import hash_password, require_admin, require_admin_audio
 from src.routers.deps import (
     UPLOADS_DIR,
     _serialize_profile,

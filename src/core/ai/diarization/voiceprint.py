@@ -1,10 +1,6 @@
 """
 Module trich xuat dac trung giong noi (Voiceprint Embedding) va doi sanh Nhan su (Speaker Identification).
-Su dung soundfile va numpy de tinh toan vector dac trung am hoc:
-- 24 dai nang luong log-Mel (Mel-filterbank energies)
-- Spectral Centroid, Spectral Rolloff (85%), Zero-Crossing Rate (ZCR)
-- Fundamental Frequency (Pitch / F0 distribution qua Autocorrelation)
-- Thong ke Mean & Std tren cac khung tin hieu co tieng noi (voiced frames), chuan hoa L2-norm.
+Duong dan: src/core/ai/diarization/voiceprint.py
 """
 
 import json
@@ -118,13 +114,11 @@ def _compute_embedding_from_signal(mono: np.ndarray, sample_rate: int) -> List[f
     if mono.size < 400:
         mono = np.pad(mono, (0, max(0, 400 - mono.size)))
 
-    # Loai bo DC offset va chuan hoa bien do
     mono = mono - np.mean(mono)
     peak = np.max(np.abs(mono))
     if peak > 1e-7:
         mono = mono / peak
 
-    # Pre-emphasis de lam noi bat formant tan so cao
     emphasized = np.append(mono[0], mono[1:] - 0.97 * mono[:-1])
 
     frame_len = max(256, int(0.025 * sample_rate))
@@ -139,7 +133,6 @@ def _compute_embedding_from_signal(mono: np.ndarray, sample_rate: int) -> List[f
     frames = emphasized[idx]
     raw_frames = mono[idx]
 
-    # Loc cac khung co nang luong tieng noi (Voiced / Active speech frames)
     frame_rms = np.sqrt(np.mean(raw_frames ** 2, axis=1) + 1e-12)
     energy_threshold = max(np.percentile(frame_rms, 25) * 0.5, 0.015)
     active_mask = frame_rms >= energy_threshold
@@ -153,15 +146,12 @@ def _compute_embedding_from_signal(mono: np.ndarray, sample_rate: int) -> List[f
     mag_spec = np.abs(np.fft.rfft(windowed, n=n_fft, axis=1))
     pow_spec = (mag_spec ** 2) / float(n_fft)
 
-    # 1. 24 dai nang luong log-Mel
     mel_fb = _create_mel_filterbank(sample_rate, n_fft=n_fft, n_mels=24)
     mel_energy = np.dot(pow_spec, mel_fb.T)
     log_mel = np.log(mel_energy + 1e-10)
-    # Chuan hoa theo trung binh tung khung de bat dac trung am sac (timbre/formants) doc lap am luong
     log_mel_norm = log_mel - np.mean(log_mel, axis=1, keepdims=True)
     log_mel_scaled = log_mel_norm / (np.std(log_mel_norm) + 1e-6)
 
-    # 2. Spectral Centroid & Spectral Rolloff (85%)
     freqs = np.linspace(0.0, sample_rate / 2.0, n_fft // 2 + 1)[None, :]
     mag_sum = np.sum(mag_spec, axis=1, keepdims=True) + 1e-10
     centroid = np.sum(freqs * mag_spec, axis=1) / (mag_sum[:, 0] * (sample_rate / 2.0))
@@ -171,12 +161,10 @@ def _compute_embedding_from_signal(mono: np.ndarray, sample_rate: int) -> List[f
     rolloff_idx = np.argmax(cum_energy >= 0.85 * total_energy, axis=1)
     rolloff = freqs[0, rolloff_idx] / (sample_rate / 2.0)
 
-    # 3. Zero-Crossing Rate (ZCR)
     signs = np.sign(raw_frames)
     signs[signs == 0] = 1
     zcr = np.mean(signs[:, 1:] != signs[:, :-1], axis=1)
 
-    # 4. Fundamental Frequency (Pitch / F0 distribution) qua Autocorrelation (75Hz - 400Hz)
     min_lag = max(1, int(sample_rate / 400.0))
     max_lag = min(frame_len - 1, int(sample_rate / 75.0))
     f0_list: List[float] = []
@@ -243,12 +231,7 @@ def extract_voiceprint_embedding(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
 ) -> List[float]:
-    """
-    Trich xuat vector dac trung giong noi (Voiceprint Embedding) tu file am thanh.
-    Chuyen mono, chuan hoa bien do, chia khung FFT trich xuat 24 dai log-Mel,
-    spectral centroid, spectral rolloff, zero-crossing rate, pitch distribution,
-    lay mean va std roi chuan hoa L2-norm.
-    """
+    """Trich xuat vector dac trung giong noi (Voiceprint Embedding) tu file am thanh."""
     mono, sample_rate = _load_mono_slice(audio_path, start_time=start_time, end_time=end_time)
     return _compute_embedding_from_signal(mono, sample_rate)
 
@@ -272,17 +255,11 @@ def match_speakers_to_profiles(
     profiles: list,
     threshold: float = 0.68,
 ) -> Dict[str, dict]:
-    """
-    Gom cac doan am thanh cua tung speaker_id (SPEAKER_00, SPEAKER_01...),
-    tinh vector dac trung trung binh va doi sanh Cosine Similarity voi cac SpeakerProfile trong DB
-    (gan 1-1 uu tien do tuong dong cao nhat).
-    Tra ve {speaker_id: {"profile_id": ..., "name": ..., "role": ..., "display_label": "Ho ten (Chuc vu)", "similarity": 0.94}}.
-    """
+    """Gom cac doan am thanh cua tung speaker_id va doi sanh Cosine Similarity voi SpeakerProfile trong DB."""
     path_obj = Path(audio_path)
     if not path_obj.exists() or not segments or not profiles:
         return {}
 
-    # Parse profile embeddings
     parsed_profiles: List[Tuple[Any, np.ndarray]] = []
     for prof in profiles:
         try:
@@ -296,7 +273,6 @@ def match_speakers_to_profiles(
     if not parsed_profiles:
         return {}
 
-    # Gom cac doan am thanh theo speaker_id
     speaker_intervals: Dict[str, List[Tuple[float, float]]] = {}
     for seg in segments:
         sid = seg.speaker_id if hasattr(seg, "speaker_id") else seg.get("speaker_id")
@@ -335,14 +311,12 @@ def match_speakers_to_profiles(
                 avg_vec = avg_vec / norm
             speaker_embeddings[sid] = avg_vec
 
-    # Tinh ma tran tuong dong (similarity, speaker_id, profile)
     candidates: List[Tuple[float, str, Any]] = []
     for sid, s_vec in speaker_embeddings.items():
         for prof, p_vec in parsed_profiles:
             sim = cosine_similarity(s_vec, p_vec)
             candidates.append((sim, sid, prof))
 
-    # Sap xep giam dan theo do tuong dong va gan 1-1
     candidates.sort(key=lambda item: item[0], reverse=True)
     assigned_speakers = set()
     assigned_profiles = set()
@@ -376,3 +350,245 @@ def match_speakers_to_profiles(
         assigned_profiles.add(prof_id)
 
     return matches
+
+
+def _extract_discriminative_subvector(vec: np.ndarray) -> np.ndarray:
+    """Trich xuat vector con nhay voi am sac va cao do giong noi (Pitch F0)."""
+    if vec.size < 60:
+        norm = float(np.linalg.norm(vec))
+        return vec / norm if norm > 1e-9 else vec
+    sub = np.concatenate([vec[0:24], vec[48:54] * 1.2, vec[54:60] * 2.0])
+    norm = float(np.linalg.norm(sub))
+    return sub / norm if norm > 1e-9 else sub
+
+
+def auto_diarize_and_identify_segments(
+    audio_path: Union[str, Path],
+    segments: List[Any],
+    profiles: Optional[List[Any]] = None,
+    profile_threshold: float = 0.72,
+    cluster_threshold: float = 0.86,
+    max_merge_gap: float = 2.0,
+    max_merged_duration: float = 20.0,
+) -> List[Any]:
+    """
+    Tu dong phan vai nguoi noi cho danh sach segments khi KHONG tai kem file diarization:
+    - Doi chieu cosine similarity voi danh sach giong mau nhan su trong PostgreSQL.
+    - Voi cac doan khong khop DB, gom cum (clustering) thanh 'Người nói 1', 'Người nói 2'...
+    - Gop cac cau lien tiep cua cung mot nguoi noi.
+    """
+    if not segments:
+        return []
+
+    path_obj = Path(audio_path) if audio_path else None
+    if path_obj is None or not path_obj.exists():
+        for idx, seg in enumerate(segments):
+            if not seg.speaker_id or seg.speaker_id == "SPEAKER_UNASSIGNED":
+                seg.speaker_id = f"SPEAKER_{idx % 2:02d}"
+                seg.speaker_name = f"Người nói {(idx % 2) + 1}"
+        return segments
+
+    parsed_profiles: List[Tuple[Any, np.ndarray, str]] = []
+    for prof in profiles or []:
+        try:
+            raw_json = (
+                prof.voiceprint_json
+                if hasattr(prof, "voiceprint_json")
+                else prof.get("voiceprint_json", "[]")
+            )
+            vec = np.asarray(json.loads(raw_json or "[]"), dtype=np.float64)
+            if vec.size == 0:
+                continue
+            prof_name = prof.name if hasattr(prof, "name") else prof.get("name", "")
+            prof_role = prof.role if hasattr(prof, "role") else prof.get("role", "")
+            display_label = (
+                prof.display_label
+                if hasattr(prof, "display_label")
+                else (f"{prof_name} ({prof_role})" if prof_role else prof_name)
+            )
+            parsed_profiles.append((prof, vec, display_label))
+        except Exception as exc:
+            logger.debug("Bo qua profile voiceprint khong hop le: %s", exc)
+
+    seg_vectors: List[Optional[np.ndarray]] = []
+    seg_disc_vectors: List[Optional[np.ndarray]] = []
+
+    for seg in segments:
+        st = getattr(seg, "start_time", None)
+        et = getattr(seg, "end_time", None)
+        try:
+            mono, sr = _load_mono_slice(path_obj, start_time=st, end_time=et)
+            if mono.size > 0:
+                emb = np.asarray(_compute_embedding_from_signal(mono, sr), dtype=np.float64)
+                seg_vectors.append(emb)
+                seg_disc_vectors.append(_extract_discriminative_subvector(emb))
+            else:
+                seg_vectors.append(None)
+                seg_disc_vectors.append(None)
+        except Exception as exc:
+            logger.debug("Khong the trich xuat vector cho segment [%.2f-%.2f]: %s", st or 0, et or 0, exc)
+            seg_vectors.append(None)
+            seg_disc_vectors.append(None)
+
+    profile_speaker_ids: Dict[str, str] = {}
+    next_speaker_slot = 0
+    unmatched_indices: List[int] = []
+
+    for idx, seg in enumerate(segments):
+        vec = seg_vectors[idx]
+        if vec is None:
+            unmatched_indices.append(idx)
+            continue
+
+        best_label: Optional[str] = None
+        best_sim = -1.0
+        for _prof, p_vec, display_label in parsed_profiles:
+            sim = cosine_similarity(vec, p_vec)
+            if sim > best_sim:
+                best_sim = sim
+                best_label = display_label
+
+        if best_label is not None and best_sim >= profile_threshold:
+            if best_label not in profile_speaker_ids:
+                profile_speaker_ids[best_label] = f"SPEAKER_{next_speaker_slot:02d}"
+                next_speaker_slot += 1
+            seg.speaker_id = profile_speaker_ids[best_label]
+            seg.speaker_name = best_label
+        else:
+            unmatched_indices.append(idx)
+
+    if unmatched_indices:
+        clusters: List[Dict[str, Any]] = []
+
+        for idx in unmatched_indices:
+            vec = seg_vectors[idx]
+            disc_vec = seg_disc_vectors[idx]
+            if vec is None or disc_vec is None:
+                if not clusters:
+                    c_num = 1
+                    c_sid = f"SPEAKER_{next_speaker_slot:02d}"
+                    next_speaker_slot += 1
+                    clusters.append(
+                        {
+                            "speaker_id": c_sid,
+                            "speaker_name": f"Người nói {c_num}",
+                            "centroid": np.zeros(60, dtype=np.float64),
+                            "disc_centroid": np.zeros(36, dtype=np.float64),
+                            "count": 1,
+                            "members": [idx],
+                        }
+                    )
+                else:
+                    clusters[-1]["members"].append(idx)
+                segments[idx].speaker_id = clusters[-1]["speaker_id"]
+                segments[idx].speaker_name = clusters[-1]["speaker_name"]
+                continue
+
+            best_c_idx = -1
+            best_combined_sim = -1.0
+            for c_idx, c_info in enumerate(clusters):
+                if np.linalg.norm(c_info["centroid"]) > 1e-6:
+                    raw_sim = cosine_similarity(vec, c_info["centroid"])
+                    d_sim = cosine_similarity(disc_vec, c_info["disc_centroid"])
+                    combined_sim = 0.45 * raw_sim + 0.55 * d_sim
+                    if combined_sim > best_combined_sim:
+                        best_combined_sim = combined_sim
+                        best_c_idx = c_idx
+
+            if best_c_idx >= 0 and (best_combined_sim >= cluster_threshold or len(clusters) >= 6):
+                target_c = clusters[best_c_idx]
+                cnt = target_c["count"]
+                new_centroid = (target_c["centroid"] * cnt + vec) / float(cnt + 1)
+                c_norm = float(np.linalg.norm(new_centroid))
+                if c_norm > 1e-9:
+                    new_centroid = new_centroid / c_norm
+
+                new_disc = (target_c["disc_centroid"] * cnt + disc_vec) / float(cnt + 1)
+                d_norm = float(np.linalg.norm(new_disc))
+                if d_norm > 1e-9:
+                    new_disc = new_disc / d_norm
+
+                target_c["centroid"] = new_centroid
+                target_c["disc_centroid"] = new_disc
+                target_c["count"] = cnt + 1
+                target_c["members"].append(idx)
+                segments[idx].speaker_id = target_c["speaker_id"]
+                segments[idx].speaker_name = target_c["speaker_name"]
+            else:
+                c_num = len(clusters) + 1
+                c_sid = f"SPEAKER_{next_speaker_slot:02d}"
+                next_speaker_slot += 1
+                clusters.append(
+                    {
+                        "speaker_id": c_sid,
+                        "speaker_name": f"Người nói {c_num}",
+                        "centroid": vec.copy(),
+                        "disc_centroid": disc_vec.copy(),
+                        "count": 1,
+                        "members": [idx],
+                    }
+                )
+                segments[idx].speaker_id = c_sid
+                segments[idx].speaker_name = f"Người nói {c_num}"
+
+        valid_unmatched = [i for i in unmatched_indices if seg_disc_vectors[i] is not None]
+        if len(clusters) == 1 and len(valid_unmatched) >= 2:
+            min_sim = 1.0
+            seed_a = valid_unmatched[0]
+            seed_b = valid_unmatched[-1]
+            for i_pos in range(len(valid_unmatched)):
+                for j_pos in range(i_pos + 1, len(valid_unmatched)):
+                    ia = valid_unmatched[i_pos]
+                    ib = valid_unmatched[j_pos]
+                    s_val = cosine_similarity(seg_disc_vectors[ia], seg_disc_vectors[ib])
+                    if s_val < min_sim:
+                        min_sim = s_val
+                        seed_a, seed_b = ia, ib
+
+            if min_sim < 0.985:
+                sid_1 = clusters[0]["speaker_id"]
+                name_1 = "Người nói 1"
+                sid_2 = f"SPEAKER_{next_speaker_slot:02d}"
+                name_2 = "Người nói 2"
+                next_speaker_slot += 1
+
+                cent_a = seg_disc_vectors[seed_a].copy()
+                cent_b = seg_disc_vectors[seed_b].copy()
+
+                for idx in valid_unmatched:
+                    dv = seg_disc_vectors[idx]
+                    sim_a = cosine_similarity(dv, cent_a)
+                    sim_b = cosine_similarity(dv, cent_b)
+                    if sim_a >= sim_b:
+                        segments[idx].speaker_id = sid_1
+                        segments[idx].speaker_name = name_1
+                    else:
+                        segments[idx].speaker_id = sid_2
+                        segments[idx].speaker_name = name_2
+
+    merged_segments: List[Any] = []
+    for seg in segments:
+        if not merged_segments:
+            merged_segments.append(seg)
+            continue
+
+        prev = merged_segments[-1]
+        same_speaker = (
+            prev.speaker_id == seg.speaker_id
+            and prev.speaker_name == seg.speaker_name
+        )
+        prev_st = prev.start_time if prev.start_time is not None else 0.0
+        prev_et = prev.end_time if prev.end_time is not None else prev_st
+        cur_st = seg.start_time if seg.start_time is not None else prev_et
+        cur_et = seg.end_time if seg.end_time is not None else cur_st
+
+        gap = max(0.0, cur_st - prev_et)
+        combined_dur = cur_et - prev_st
+
+        if same_speaker and gap <= max_merge_gap and combined_dur <= max_merged_duration:
+            prev.end_time = round(cur_et, 2)
+            prev.text = f"{prev.text.rstrip()} {seg.text.lstrip()}".strip()
+        else:
+            merged_segments.append(seg)
+
+    return merged_segments

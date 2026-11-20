@@ -1,5 +1,5 @@
 """
-Module Bao mat Xac thuc Nguoi dung:
+Module Bao mat Xac thuc Nguoi dung (src/core/security.py):
 - Bam va kiem tra mat khau truc tiep bang bcrypt (khong dung passlib).
 - Tuong thich nguoc cho tai khoan cu luu plain-text (hoac SHA-256 cu) trong PostgreSQL:
   tu dong nang cap sang bcrypt hash va luu lai vao DB ngay khi dang nhap thanh cong.
@@ -19,13 +19,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 
 from config.settings import JWT_ALGORITHM, JWT_EXPIRE_MINUTES, JWT_SECRET_KEY
-from src.db.repository import SpeakerRepository
+from src.db.repository import SpeakerProfileRepository
 from src.schemas.meeting import SpeakerProfile
 
 logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer(auto_error=False)
-_speaker_repo = SpeakerRepository()
+_speaker_repo = SpeakerProfileRepository()
 
 
 def is_bcrypt_hash(stored_value: Optional[str]) -> bool:
@@ -46,17 +46,12 @@ def verify_password(raw_password: str, stored_password: Optional[str]) -> Tuple[
     """
     Xac thuc mat khau va kiem tra xem co can nang cap hash trong DB hay khong.
     Tra ve tuple: (is_valid, needs_rehash_to_bcrypt).
-    - Neu stored_password la bcrypt hash: verify bang bcrypt.checkpw -> (matched, False).
-    - Neu stored_password khong khop dinh dang bcrypt (plain-text hoac SHA-256 cu):
-      so sanh plain-text (stored == raw_password) hoac SHA-256 hex digest;
-      neu khop -> tra ve (True, True) de tu dong bam bang bcrypt va cap nhat vao DB.
     """
     if not raw_password:
         return False, False
 
     stored = (stored_password or "").strip()
     if not stored:
-        # Tai khoan cu chua co mat khau -> mac dinh '123456' va can nang cap sang bcrypt
         if raw_password == "123456":
             return True, True
         return False, False
@@ -69,14 +64,11 @@ def verify_password(raw_password: str, stored_password: Optional[str]) -> Tuple[
             )
             return bool(matched), False
         except ValueError:
-            # Truong hop chuoi bat dau bang $2 nhung khong phai bcrypt hop le
             pass
 
-    # Tuong thich nguoc 1: Mat khau cu dang luu plain-text trong PostgreSQL
     if stored == raw_password:
         return True, True
 
-    # Tuong thich nguoc 2: Mat khau cu dang luu SHA-256 hex
     legacy_sha256 = hashlib.sha256(raw_password.encode("utf-8")).hexdigest()
     if stored.lower() == legacy_sha256.lower():
         return True, True
@@ -87,7 +79,7 @@ def verify_password(raw_password: str, stored_password: Optional[str]) -> Tuple[
 def authenticate_user_and_upgrade_hash(
     username: str,
     raw_password: str,
-    speaker_repo: Optional[SpeakerRepository] = None,
+    speaker_repo: Optional[SpeakerProfileRepository] = None,
 ) -> Optional[SpeakerProfile]:
     """
     Kiem tra dang nhap theo username + raw_password.
@@ -195,9 +187,7 @@ def _resolve_user_from_jwt(token_str: str) -> SpeakerProfile:
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
 ) -> SpeakerProfile:
-    """
-    FastAPI Dependency: Xac thuc nguoi dung tu header 'Authorization: Bearer <token>'.
-    """
+    """FastAPI Dependency: Xac thuc nguoi dung tu header 'Authorization: Bearer <token>'."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -210,9 +200,7 @@ def get_current_user(
 def require_admin(
     current_user: SpeakerProfile = Depends(get_current_user),
 ) -> SpeakerProfile:
-    """
-    FastAPI Dependency: Yeu cau nguoi dung da dang nhap qua Bearer JWT va co quyen is_admin=True.
-    """
+    """FastAPI Dependency: Yeu cau nguoi dung da dang nhap qua Bearer JWT va co quyen is_admin=True."""
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -225,10 +213,7 @@ def get_current_user_audio(
     token: Optional[str] = Query(default=None, description="JWT token truyen qua query cho the <audio>"),
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
 ) -> SpeakerProfile:
-    """
-    FastAPI Dependency danh rieng cho endpoint phat am thanh (<audio src="...?token=<jwt>">):
-    Uu tien doc header Authorization: Bearer <token>, neu khong co thi doc query param ?token=<jwt>.
-    """
+    """FastAPI Dependency danh rieng cho endpoint phat am thanh (<audio src="...?token=<jwt>">)."""
     raw_token = (
         credentials.credentials
         if (credentials is not None and credentials.credentials)
@@ -246,10 +231,7 @@ def get_current_user_audio(
 def require_admin_audio(
     current_user: SpeakerProfile = Depends(get_current_user_audio),
 ) -> SpeakerProfile:
-    """
-    FastAPI Dependency danh rieng cho endpoint nghe mau giong o trang Admin (<audio src="...?token=<jwt>">):
-    Chap nhan Bearer header hoac ?token=<jwt> va bat buoc current_user.is_admin == True.
-    """
+    """FastAPI Dependency danh rieng cho endpoint nghe mau giong o trang Admin."""
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

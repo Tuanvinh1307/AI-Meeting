@@ -14,13 +14,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from config.settings import BASE_DIR
-from src.ai.alignment import DiarizationInputType, transcribe_with_diarization
-from src.ai.llm import MeetingLLMAnalyzer, clean_vietnamese_asr_text
-from src.ai.transcription import PhoWhisperASR
-from src.ai.voiceprint import (
+from src.core.ai.asr.phowhisper import PhoWhisperASR
+from src.core.ai.diarization.alignment import DiarizationInputType
+from src.core.ai.diarization.voiceprint import (
     extract_voiceprint_embedding,
-    match_speakers_to_profiles,
     save_audio_clip,
+)
+from src.core.ai.graph.workflow import meeting_graph
+from src.core.ai.llm import (
+    LLMExtractionOutput,
+    MeetingLLMAnalyzer,
+    clean_vietnamese_asr_text,
 )
 from src.db.connection import init_db
 from src.db.repository import MeetingRepository, SpeakerProfileRepository, TaskRepository
@@ -127,71 +131,73 @@ class MeetingService:
 
         meeting_title = title.strip() if title.strip() else "Cuộc họp bóc băng âm thanh"
         logger.info(
-            "Bat dau xu ly cuoc hop tu file audio: title='%s', file='%s', co_diarization=%s",
+            "Bat dau xu ly cuoc hop qua LangGraph Pipeline: title='%s', file='%s', co_diarization=%s",
             meeting_title,
             path_obj.name,
             resolved_diarization is not None,
         )
 
-        if resolved_diarization is not None:
-            full_text, segments = transcribe_with_diarization(
-                asr=self.asr,
-                audio_path=path_obj,
-                diarization_input=resolved_diarization,
-                speaker_mapping=speaker_mapping,
-            )
-        else:
-            full_text, segments = self.asr.transcribe(
-                path_obj,
-                return_timestamps=True,
-                speaker_id="SPEAKER_UNASSIGNED",
-                speaker_name="Chưa phân vai",
-            )
-
-        if not full_text.strip():
-            raise ValueError("Mo hinh khong nhan dien duoc bat ky noi dung am thanh nao tu file ghi am.")
-
-        # Tu dong doi sanh giong noi voi bang speaker_profiles neu co du lieu
         profiles = self.speaker_repo.get_all()
-        if profiles and segments:
-            try:
-                matched = match_speakers_to_profiles(
-                    audio_path=path_obj,
-                    segments=segments,
-                    profiles=profiles,
-                )
-                if matched:
-                    for seg in segments:
-                        if speaker_mapping and seg.speaker_id in speaker_mapping:
-                            continue
-                        if seg.speaker_id in matched:
-                            seg.speaker_name = matched[seg.speaker_id]["display_label"]
-                    logger.info(
-                        "Tu dong nhan dien giong noi thanh cong cho %d nguoi noi: %s",
-                        len(matched),
-                        {k: v["display_label"] for k, v in matched.items()},
-                    )
-            except Exception as exc:
-                logger.warning("Khong the doi sanh voiceprint tu dong: %s", exc)
+        final_state = meeting_graph.invoke(
+            {
+                "audio_path": path_obj,
+                "valid_speakers": profiles,
+                "raw_segments": [],
+                "aligned_segments": [],
+                "transcript_text": "",
+                "analysis_result": None,
+                "validation_errors": [],
+                "retry_count": 0,
+                "asr": self.asr,
+                "analyzer": self.analyzer,
+                "diarization_input": resolved_diarization,
+                "speaker_mapping": speaker_mapping,
+                "run_llm_analysis": run_llm_analysis,
+            }
+        )
 
-        logger.info("Nhan dang audio hoan tat: tao duoc %d doan thoai.", len(segments))
+        full_text = str(final_state.get("transcript_text") or "")
+        segments: List[TranscriptSegment] = list(final_state.get("aligned_segments") or [])
+        extraction: Optional[LLMExtractionOutput] = final_state.get("analysis_result")
+
+        logger.info("LangGraph Pipeline hoan tat: tao duoc %d doan thoai.", len(segments))
         today_str = datetime.now().strftime("%Y-%m-%d")
 
-        # Dong goi du lieu trung thuc (khong tu sinh task gia hay xac nhan lam sach)
-        analysis = MeetingAnalysis(
-            title=meeting_title,
-            date=today_str,
-            raw_transcript=full_text,
-            cleaned_transcript=None,
-            segments=segments,
-            summary="Bản bóc băng tự động từ âm thanh (Chưa chạy phân tích tổng hợp)",
-            key_decisions=[],
-            tasks=[],
-        )
+        if run_llm_analysis and extraction is not None:
+            final_segments = extraction.cleaned_segments if extraction.cleaned_segments else segments
+            analysis = MeetingAnalysis(
+                title=meeting_title,
+                date=today_str,
+                raw_transcript=full_text,
+                cleaned_transcript=extraction.cleaned_transcript,
+                segments=final_segments,
+                summary=extraction.summary,
+                key_decisions=extraction.key_decisions,
+                tasks=extraction.tasks,
+            )
+        else:
+            analysis = MeetingAnalysis(
+                title=meeting_title,
+                date=today_str,
+                raw_transcript=full_text,
+                cleaned_transcript=None,
+                segments=segments,
+                summary="Bản bóc băng tự động từ âm thanh (Chưa chạy phân tích tổng hợp)",
+                key_decisions=[],
+                tasks=[],
+            )
 
         meeting_id = self.meeting_repo.create(analysis)
         analysis.id = meeting_id
         logger.info("Da luu cuoc hop audio thanh cong voi ID=%d.", meeting_id)
+
+        if run_llm_analysis and extraction is not None:
+            self.meeting_repo.update_analysis_result(
+                meeting_id=meeting_id,
+                cleaned_transcript=extraction.cleaned_transcript,
+                summary=extraction.summary,
+                key_decisions=extraction.key_decisions,
+            )
 
         if analysis.tasks:
             task_ids = self.task_repo.create_batch(meeting_id, analysis.tasks)
@@ -199,17 +205,13 @@ class MeetingService:
                 task.id = tid
                 task.meeting_id = meeting_id
 
-        if run_llm_analysis:
-            return self.analyze_meeting(meeting_id)
-
         return analysis
 
     def analyze_meeting(self, meeting_id: int) -> MeetingAnalysis:
         """
-        Phan tich cuoc hop da luu trong co so du lieu bang MeetingLLMAnalyzer:
-        1. Truy xuat thong tin cuoc hop va danh sach segments hien tai (bao gom speaker_name da cap nhat).
-        2. Goi analyzer.analyze() de lam sach van ban ASR, tom tat, rut ra quyet dinh
-           va trich xuat cong viec co doi chieu bang chung nguon.
+        Phan tich cuoc hop da luu trong co so du lieu qua LangGraph Pipeline:
+        1. Truy xuat thong tin cuoc hop va danh sach segments hien tai.
+        2. Goi meeting_graph.invoke() (analyze_node -> validate_node kem retry tu sua loi).
         3. Cap nhat ket qua vao MeetingRepository va TaskRepository.replace_meeting_tasks().
         4. Tra ve doi tuong MeetingAnalysis hoan chinh.
         """
@@ -229,16 +231,31 @@ class MeetingService:
             for s in raw_segments
         ]
         raw_transcript = details.get("raw_transcript") or ""
+        profiles = self.speaker_repo.get_all()
 
         logger.info(
-            "Bat dau phan tich LLM cho meeting_id=%d (%d segments)...",
+            "Bat dau phan tich LangGraph cho meeting_id=%d (%d segments)...",
             meeting_id,
             len(segments),
         )
-        extraction = self.analyzer.analyze(
-            segments=segments,
-            raw_transcript=raw_transcript,
+        final_state = meeting_graph.invoke(
+            {
+                "audio_path": None,
+                "valid_speakers": profiles,
+                "raw_segments": segments,
+                "aligned_segments": segments,
+                "transcript_text": raw_transcript,
+                "analysis_result": None,
+                "validation_errors": [],
+                "retry_count": 0,
+                "asr": self.asr,
+                "analyzer": self.analyzer,
+                "run_llm_analysis": True,
+            }
         )
+        extraction: Optional[LLMExtractionOutput] = final_state.get("analysis_result")
+        if extraction is None:
+            extraction = self.analyzer.analyze(segments=segments, raw_transcript=raw_transcript)
 
         self.meeting_repo.update_analysis_result(
             meeting_id=meeting_id,

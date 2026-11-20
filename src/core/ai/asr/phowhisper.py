@@ -1,6 +1,6 @@
 """
 Module: phowhisper.py
-Duong dan: src/ai/transcription/phowhisper.py
+Duong dan: src/core/ai/asr/phowhisper.py
 Muc dich: Module ASR (Automatic Speech Recognition) chinh thuc cua he thong.
 Su dung mo hinh PhoWhisper (vinai/PhoWhisper-base) de nhan dang giong noi tieng Viet.
 
@@ -8,10 +8,11 @@ Quy tac kien truc va do chinh xac du lieu:
 - Khong import Streamlit hoac bat ky thu vien UI nao.
 - Ap dung Lazy Loading: chi nap mo hinh khi thuc su can su dung.
 - Tai su dung pipeline (in-memory caching): khong nap lai mo hinh o cac lan goi sau.
-- Dong bo hoa thread-safe: su dung khoa reentrant/lock tranh tranh chap khi nhieu phien goi dong thoi.
-- Trung thuc ve timestamp: bao toan gia tri None khi mo hinh khong du doan duoc end_time.
-- Chuyen doi ket qua sang danh sach Pydantic TranscriptSegment chuan hoa.
-- Doc file WAV truc tiep bang SoundFile, khong phu thuoc vao FFmpeg he thong.
+- Dong bo hoa thread-safe: su dung khoa lock tranh tranh chap khi nhieu phien goi dong thoi.
+- Su dung co che native timestamp cua PhoWhisper/Whisper (khong tu cat audio theo khoang lang
+  truoc khi boc bang de tranh cat dut giua tu).
+- Neu Whisper tra ve end_time = None, lay thoi luong thuc te cua file audio (tinh bang soundfile)
+  lam end_time chinh xac.
 """
 
 import logging
@@ -22,33 +23,52 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import soundfile as sf
+import torch
 
 from src.schemas.meeting import TranscriptSegment
 
 logger = logging.getLogger(__name__)
 
 
+def _resolve_default_device(device: Optional[str] = None) -> str:
+    """Tu dong chon GPU ('cuda') neu kha dung, nguoc lai dung 'cpu'."""
+    if device is not None and str(device).strip():
+        req = str(device).strip().lower()
+        if req.startswith("cuda") and not torch.cuda.is_available():
+            return "cpu"
+        return req
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def split_audio_by_silence(
+    audio_data: np.ndarray,
+    sample_rate: int,
+    min_segment_s: float = 3.0,
+    max_segment_s: float = 14.0,
+    min_silence_s: float = 0.28,
+    padding_s: float = 0.12,
+) -> List[Tuple[float, float]]:
+    """Ham giu lai de tuong thich import; khong su dung de cat audio truoc khi chay PhoWhisper."""
+    if len(audio_data) == 0 or sample_rate <= 0:
+        return []
+    return [(0.0, round(len(audio_data) / float(sample_rate), 2))]
+
+
 class PhoWhisperASR:
     """
     Dieu phoi nhan dang giong noi tieng Viet su dung mo hinh PhoWhisper.
-    Ho tro trich xuat moc thoi gian (timestamps) va dong goi TranscriptSegment.
-    
-    Luu y: Lop nay chi thuc hien ASR (Speech-to-Text), chua thuc hien Speaker Diarization.
-    Cac gia tri speaker_id va speaker_name la placeholder cho den khi tich hop Diarization.
+    Su dung truc tiep native timestamp cua Whisper va lay thoi luong thuc cua audio
+    khi Whisper tra ve ending timestamp = None.
     """
 
     def __init__(
         self,
         model_id: str = "vinai/PhoWhisper-base",
-        device: str = "cpu",
+        device: Optional[str] = None,
         chunk_length_s: int = 30,
     ) -> None:
-        """
-        Khoi tao cau hinh cho PhoWhisperASR.
-        Ap dung Lazy Loading: khong nap pipeline vao RAM ngay tai thoi diem khoi tao.
-        """
         self.model_id = model_id
-        self.device = device
+        self.device = _resolve_default_device(device)
         self.chunk_length_s = chunk_length_s
         self._pipeline = None
         self._lock = threading.Lock()
@@ -61,7 +81,7 @@ class PhoWhisperASR:
     def load_model(self) -> None:
         """
         Nap mo hinh PhoWhisper vao bo nho su dung double-checked locking de dam bao thread-safe.
-        Neu mo hinh da ton tai, bo qua de tiet kiem tai nguyen.
+        Khi chay tren GPU ('cuda'), truyen dung thiet bi GPU vao transformers.pipeline.
         """
         if self._pipeline is not None:
             return
@@ -72,23 +92,31 @@ class PhoWhisperASR:
 
             from transformers import pipeline
 
+            pipeline_device: Union[int, str, torch.device] = (
+                0 if self.device == "cuda" and torch.cuda.is_available() else self.device
+            )
+
             logger.info(
-                "Dang nap mo hinh PhoWhisper '%s' len thiet bi '%s'...",
+                "Dang nap mo hinh PhoWhisper '%s' len thiet bi '%s' (cuda_available=%s)...",
                 self.model_id,
                 self.device,
+                torch.cuda.is_available(),
             )
             start_time = time.time()
 
             self._pipeline = pipeline(
                 task="automatic-speech-recognition",
                 model=self.model_id,
-                device=self.device,
-                chunk_length_s=self.chunk_length_s,
+                device=pipeline_device,
             )
+
+            if self.device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             load_duration = time.time() - start_time
             logger.info(
-                "Nap mo hinh PhoWhisper thanh cong trong %.2f giay.",
+                "Nap mo hinh PhoWhisper thanh cong tren '%s' trong %.2f giay.",
+                self.device,
                 load_duration,
             )
 
@@ -100,42 +128,35 @@ class PhoWhisperASR:
         speaker_name: str = "Nguoi noi",
     ) -> Tuple[str, List[TranscriptSegment]]:
         """
-        Boc bang am thanh thanh van ban tieng Viet kem moc thoi gian.
-
-        Tham so:
-        - audio_input: Duong dan file am thanh (str, Path) hoac mang numpy audio data.
-        - return_timestamps: True de trich xuat moc thoi gian theo tung doan loi thoai.
-        - speaker_id: Nhan dinh danh nguoi noi (placeholder).
-        - speaker_name: Ten hien thi nguoi noi (placeholder).
-
-        Tra ve:
-        - Tuple[str, List[TranscriptSegment]]: Full text va danh sach cac doan hoi thoai.
+        Boc bang am thanh thanh van ban tieng Viet bang co che native cua PhoWhisper:
+        - Khong tu cat audio bang VAD truoc khi dua vao PhoWhisper de bao toan 100% ngu canh am vi.
+        - Neu Whisper tra ve end_time = None o chunk cuoi, gan end_time bang thoi luong thuc te
+          cua file audio (total_duration tinh tu soundfile).
         """
         self.load_model()
 
-        audio_data = None
         sample_rate = 16000
-        total_duration = None
+        total_duration: Optional[float] = None
 
-        # 1. Doc va kiem tra tinh hop le cua du lieu am thanh
         if isinstance(audio_input, (str, Path)):
             audio_path = Path(audio_input)
             if not audio_path.exists():
-                raise FileNotFoundError(f"Khong tim thay file am thanh tai: {audio_path.resolve()}")
+                raise FileNotFoundError(
+                    f"Khong tim thay file am thanh tai: {audio_path.resolve()}"
+                )
 
             try:
                 audio_data, sample_rate = sf.read(str(audio_path))
-            except Exception as e:
+            except Exception as exc:
                 raise ValueError(
-                    f"Khong the doc file am thanh '{audio_path}'. Dinh dang file khong duoc ho tro. Chi tiet: {e}"
-                ) from e
+                    f"Khong the doc file am thanh '{audio_path}'. Dinh dang file khong duoc ho tro. Chi tiet: {exc}"
+                ) from exc
 
             if len(audio_data) == 0:
                 raise ValueError(f"File am thanh '{audio_path}' rong (0 samples).")
 
             total_duration = len(audio_data) / float(sample_rate)
 
-            # Chuyen stereo sang mono neu can thiet
             if len(audio_data.shape) > 1 and audio_data.shape[1] > 1:
                 audio_data = np.mean(audio_data, axis=1)
 
@@ -148,6 +169,12 @@ class PhoWhisperASR:
             if len(audio_data) == 0:
                 raise ValueError("Mang du lieu am thanh audio_input rong (0 samples).")
 
+            if len(audio_data.shape) > 1 and audio_data.shape[1] > 1:
+                audio_data = np.mean(audio_data, axis=1)
+
+            if audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
+
             total_duration = len(audio_data) / float(sample_rate)
             inputs = {"raw": audio_data, "sampling_rate": sample_rate}
         else:
@@ -155,34 +182,37 @@ class PhoWhisperASR:
                 f"Dinh dang audio_input khong hop le: {type(audio_input)}. Chi chap nhan str, Path hoac np.ndarray."
             )
 
-        # 2. Thuc hien suy luan co khoa lock de an toan khi chia se instance tren nhieu luong
         logger.info("Bat dau giai ma am thanh va trich xuat van ban...")
         start_infer = time.time()
 
         with self._lock:
-            result = self._pipeline(
-                inputs,
-                return_timestamps=return_timestamps,
-            )
+            try:
+                if return_timestamps:
+                    result = self._pipeline(inputs, return_timestamps=True)
+                else:
+                    result = self._pipeline(inputs)
+            finally:
+                if self.device.startswith("cuda") and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
         infer_duration = time.time() - start_infer
         logger.info("Boc bang am thanh hoan tat trong %.2f giay.", infer_duration)
 
-        full_text = result.get("text", "").strip()
+        full_text = result.get("text", "").strip() if isinstance(result, dict) else str(result or "").strip()
 
-        # 3. Chuyen doi chunks sang TranscriptSegment (giu nguyen None neu model khong doan duoc moc ket thuc)
         segments: List[TranscriptSegment] = []
-        raw_chunks = result.get("chunks", [])
+        raw_chunks = result.get("chunks", []) if isinstance(result, dict) else []
 
         if raw_chunks:
-            for chunk in raw_chunks:
+            num_chunks = len(raw_chunks)
+            for idx, chunk in enumerate(raw_chunks):
                 chunk_text = chunk.get("text", "").strip()
                 if not chunk_text:
                     continue
 
                 ts = chunk.get("timestamp")
-                start_sec = None
-                end_sec = None
+                start_sec: Optional[float] = None
+                end_sec: Optional[float] = None
 
                 if isinstance(ts, (tuple, list)):
                     if len(ts) > 0 and ts[0] is not None:
@@ -195,11 +225,31 @@ class PhoWhisperASR:
                         else:
                             end_sec = round(raw_end, 2)
 
+                # Neu Whisper tra ve end_time = None, lay moc bat dau cua chunk ke tiep
+                # hoac lay thoi luong thuc te cua file audio (total_duration)
+                if end_sec is None:
+                    next_start: Optional[float] = None
+                    if idx + 1 < num_chunks:
+                        next_ts = raw_chunks[idx + 1].get("timestamp")
+                        if (
+                            isinstance(next_ts, (tuple, list))
+                            and len(next_ts) > 0
+                            and next_ts[0] is not None
+                        ):
+                            cand_next = float(next_ts[0])
+                            if start_sec is None or cand_next > start_sec:
+                                next_start = round(cand_next, 2)
+
+                    if next_start is not None:
+                        end_sec = next_start
+                    elif total_duration is not None:
+                        end_sec = round(total_duration, 2)
+
                 segments.append(
                     TranscriptSegment(
                         speaker_id=speaker_id,
                         speaker_name=speaker_name,
-                        start_time=start_sec,
+                        start_time=start_sec if start_sec is not None else 0.0,
                         end_time=end_sec,
                         text=chunk_text,
                     )
@@ -210,8 +260,8 @@ class PhoWhisperASR:
                 TranscriptSegment(
                     speaker_id=speaker_id,
                     speaker_name=speaker_name,
-                    start_time=None,
-                    end_time=None,
+                    start_time=0.0 if total_duration is not None else None,
+                    end_time=round(total_duration, 2) if total_duration is not None else None,
                     text=full_text,
                 )
             )

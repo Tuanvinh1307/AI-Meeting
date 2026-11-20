@@ -17,6 +17,16 @@ load_dotenv(BASE_DIR / ".env")
 APP_NAME = "AI Meeting Intelligence & Task Management System"
 APP_VERSION = "2.3.0"
 
+# Model Gemini uu tien (loai bo tien to 'models/' hoac dau nhay thua neu co trong .env)
+GEMINI_MODEL = (
+    os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    .strip()
+    .strip("\"'")
+    .removeprefix("models/")
+    .strip()
+    or "gemini-3.5-flash-lite"
+)
+
 # Cau hinh Bao mat Xac thuc JWT (co gia tri mac dinh an toan cho moi truong local)
 JWT_SECRET_KEY = os.getenv(
     "JWT_SECRET_KEY",

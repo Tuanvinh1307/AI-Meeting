@@ -10,8 +10,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from config.settings import BASE_DIR
-from src.ai.voiceprint import match_speakers_to_profiles
-from src.auth.security import hash_password, is_bcrypt_hash
+from src.core.ai.diarization.voiceprint import match_speakers_to_profiles
+from src.core.security import hash_password, is_bcrypt_hash
 from src.db.connection import get_db_connection, is_postgres_backend
 from src.schemas.meeting import SpeakerProfile
 from src.schemas.task import TaskPriority, TaskStatus

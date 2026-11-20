@@ -85,7 +85,14 @@ def serve_workspace_spa() -> FileResponse:
     index_path = WEB_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="Chua tim thay file giao dien web/index.html")
-    return FileResponse(str(index_path), media_type="text/html; charset=utf-8")
+    return FileResponse(
+        str(index_path),
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -94,7 +101,14 @@ def serve_admin_portal() -> FileResponse:
     admin_path = WEB_DIR / "admin.html"
     if not admin_path.exists():
         raise HTTPException(status_code=404, detail="Chua tim thay file giao dien web/admin.html")
-    return FileResponse(str(admin_path), media_type="text/html; charset=utf-8")
+    return FileResponse(
+        str(admin_path),
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 # ==============================================================================

@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from src.auth.security import (
+from src.core.security import (
     authenticate_user_and_upgrade_hash,
     create_access_token,
     get_current_user,

@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import FileResponse
 
 from config.settings import BASE_DIR
-from src.ai.voiceprint import match_speakers_to_profiles
-from src.auth.security import get_current_user, get_current_user_audio
+from src.core.ai.diarization.voiceprint import match_speakers_to_profiles
+from src.core.security import get_current_user, get_current_user_audio
 from src.routers.deps import (
     SpeakerUpdatePayload,
     TaskPatchPayload,

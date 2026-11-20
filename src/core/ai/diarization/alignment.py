@@ -1,15 +1,9 @@
 """
 Module: alignment.py
-Duong dan: src/ai/alignment.py
+Duong dan: src/core/ai/diarization/alignment.py
 Muc dich: Xu ly ket qua Speaker Diarization (lam sach nhieu, gop luot noi)
 va ket hop (alignment) voi PhoWhisper ASR de tao danh sach TranscriptSegment
 co nhan nguoi noi va moc thoi gian chinh xac.
-
-Quy tac kien truc:
-- Khong import Streamlit hoac bat ky thu vien UI nao.
-- Khong in truc tiep ra console, su dung logging chuan cua he thong.
-- Khong su dung emoji trong code, docstring, log hoac exception.
-- Bao toan trung thuc moc thoi gian (khong tu bia timestamp neu la None).
 """
 
 import json
@@ -20,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import soundfile as sf
 
-from src.ai.transcription.phowhisper import PhoWhisperASR
+from src.core.ai.asr.phowhisper import PhoWhisperASR
 from src.schemas.meeting import TranscriptSegment
 
 logger = logging.getLogger(__name__)
@@ -32,10 +26,7 @@ def _resolve_speaker_name(
     speaker_id: str,
     speaker_mapping: Optional[Dict[str, str]] = None,
 ) -> str:
-    """
-    Chuyen doi ma dinh danh speaker_id sang ten hien thi than thien.
-    Uu tien su dung speaker_mapping neu duoc cung cap.
-    """
+    """Chuyen doi ma dinh danh speaker_id sang ten hien thi than thien."""
     if speaker_mapping and speaker_id in speaker_mapping:
         mapped = str(speaker_mapping[speaker_id]).strip()
         if mapped:
@@ -56,17 +47,7 @@ def load_diarization_segments(
     diarization_input: DiarizationInputType,
     prefer_exclusive: bool = True,
 ) -> List[Dict[str, Any]]:
-    """
-    Nap danh sach cac phan doan diarization tu duong dan file JSON, dict hoac list.
-
-    Tham so:
-    - diarization_input: Duong dan file JSON (str/Path), dict chua ket qua diarization,
-      hoac list cac dict segment.
-    - prefer_exclusive: Uu tien lay truong 'exclusive_diarization' khi input la dict.
-
-    Tra ve:
-    - Danh sach cac dict bieu dien segment diarization.
-    """
+    """Nap danh sach cac phan doan diarization tu duong dan file JSON, dict hoac list."""
     data: Any = diarization_input
 
     if isinstance(diarization_input, (str, Path)):
@@ -114,18 +95,7 @@ def clean_and_merge_diarization_turns(
     min_duration: float = 0.1,
     max_merge_gap: float = 1.2,
 ) -> List[Dict[str, Any]]:
-    """
-    Lam sach cac doan am thanh qua ngan (nhieu) va gop cac luot noi lien tiep
-    cua cung mot nguoi noi neu khoang nghi giua chung <= max_merge_gap.
-
-    Tham so:
-    - segments: Danh sach cac segment tho tu mo hinh diarization.
-    - min_duration: Thoi luong toi thieu (giay) de giu lai mot segment.
-    - max_merge_gap: Khoang cach toi da (giay) de gop 2 segment cung speaker_id.
-
-    Tra ve:
-    - Danh sach cac luot noi (turns) da duoc lam sach va gop.
-    """
+    """Lam sach cac doan am thanh qua ngan va gop cac luot noi lien tiep cua cung mot nguoi noi."""
     if not segments:
         return []
 
@@ -145,7 +115,9 @@ def clean_and_merge_diarization_turns(
         if actual_duration < min_duration or recorded_duration < min_duration:
             continue
 
-        speaker_id = str(seg.get("speaker_id", "SPEAKER_UNASSIGNED")).strip()
+        speaker_id = str(
+            seg.get("speaker_id") or seg.get("speaker") or "SPEAKER_UNASSIGNED"
+        ).strip()
         if not speaker_id:
             speaker_id = "SPEAKER_UNASSIGNED"
 
@@ -196,16 +168,7 @@ def align_segments_by_overlap(
     min_overlap_ratio: float = 0.1,
     speaker_mapping: Optional[Dict[str, str]] = None,
 ) -> List[TranscriptSegment]:
-    """
-    Gan nhan nguoi noi cho danh sach TranscriptSegment co san dua tren do phu
-    thoi gian (temporal overlap) voi cac luot noi diarization_turns.
-
-    Quy tac trung thuc du lieu:
-    - Neu segment khong co start_time hoac end_time (gia tri la None) hoac
-      end_time <= start_time, gan 'SPEAKER_UNASSIGNED' va giu nguyen timestamp goc.
-    - Neu ty le giao nhau (overlap / segment_duration) nho hon min_overlap_ratio,
-      gan 'SPEAKER_UNASSIGNED'.
-    """
+    """Gan nhan nguoi noi cho danh sach TranscriptSegment dua tren do phu thoi gian."""
     aligned_results: List[TranscriptSegment] = []
 
     for seg in asr_segments:
@@ -273,18 +236,15 @@ def transcribe_with_diarization(
     diarization_input: DiarizationInputType,
     min_duration: float = 0.1,
     max_merge_gap: float = 1.2,
-    padding_s: float = 0.15,
+    padding_s: float = 0.25,
     speaker_mapping: Optional[Dict[str, str]] = None,
 ) -> Tuple[str, List[TranscriptSegment]]:
     """
     Ket hop ket qua Speaker Diarization va PhoWhisperASR theo tung luot noi:
-    1. Doc va kiem tra file am thanh bang SoundFile.
-    2. Nap, loc nhieu va gop cac luot noi cung speaker_id.
-    3. Cat audio theo tung turn (kem padding_s an toan o hai dau) va goi PhoWhisperASR.
-    4. Tao danh sach TranscriptSegment voi speaker_id, speaker_name, start_time, end_time.
-
-    Tra ve:
-    - Tuple[str, List[TranscriptSegment]]: Toan bo van ban ghep noi va danh sach segments.
+    1. Gop cac luot noi lien tiep cua cung 1 speaker truoc.
+    2. Cat audio theo dung tung luot noi (cong dem 0.25s o dau va cuoi moi luot,
+       gioi han trong tong thoi luong audio [0.0, total_duration], de khong bi dut am).
+    3. Boc bang tung luot bang PhoWhisper.
     """
     path_obj = Path(audio_path)
     if not path_obj.exists():
