@@ -90,3 +90,21 @@ class MeetingAnalysis(BaseModel):
         default_factory=list,
         description="Danh sách các Action Items / Tasks kèm đầy đủ bối cảnh và người liên quan",
     )
+
+    # Trạng thái tiến độ xử lý bất đồng bộ (Async Background Pipeline)
+    status: str = Field(
+        default="completed",
+        description="Trạng thái xử lý: queued | processing | completed | failed",
+    )
+    current_step: Optional[str] = Field(
+        default="completed",
+        description="Bước hiện tại: queued | asr | diarization | voiceprint | llm | saving | completed",
+    )
+    progress: int = Field(
+        default=100,
+        description="Phần trăm tiến độ xử lý (0 - 100)",
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Thông báo lỗi nếu status = failed",
+    )

@@ -5,7 +5,7 @@ Muc dich: Dinh nghia MeetingGraphState (TypedDict) cho LangGraph Pipeline.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, Callable, Dict, List, Optional, TypedDict, Union
 
 from src.core.ai.asr.phowhisper import PhoWhisperASR
 from src.core.ai.diarization.alignment import DiarizationInputType
@@ -26,6 +26,8 @@ class MeetingGraphState(TypedDict, total=False):
     validation_errors: List[str]
     retry_count: int
     # Cac tham so dieu phoi runtime tuy chon
+    meeting_id: Optional[int]
+    progress_callback: Optional[Callable[[str, int], None]]
     asr: Optional[PhoWhisperASR]
     analyzer: Optional[MeetingLLMAnalyzer]
     diarization_input: Optional[DiarizationInputType]

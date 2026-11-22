@@ -7,11 +7,16 @@ Quy tac kien truc:
 - Ho tro Dependency Injection cho ASR va Database connection phuc vu testing va caching.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+import gc
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
+import shutil
 from typing import Any, Dict, List, Optional, Union
+
+import torch
 
 from config.settings import BASE_DIR
 from src.core.ai.asr.phowhisper import PhoWhisperASR
@@ -32,6 +37,24 @@ from src.schemas.meeting import MeetingAnalysis, SpeakerProfile, TranscriptSegme
 from src.schemas.task import TaskConfirmationStatus, TaskItem, TaskPriority, TaskStatus
 
 logger = logging.getLogger(__name__)
+
+# Hang doi tuan tu 1 worker duy nhat cho GPU GTX 1060 (6GB VRAM):
+# - Tranh block FastAPI Event Loop.
+# - Xu ly tuan tu tung file mot, triet tieu nguy co CUDA Out-Of-Memory (OOM).
+_gpu_pipeline_executor = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="gpu_pipeline_worker",
+)
+
+
+def _cleanup_gpu_vram() -> None:
+    """Thu gom rac bo nho va giai phong VRAM CUDA sau moi lan chay pipeline."""
+    try:
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception as exc:
+        logger.debug("Khong the don dep VRAM CUDA: %s", exc)
 
 
 class MeetingService:
@@ -138,23 +161,26 @@ class MeetingService:
         )
 
         profiles = self.speaker_repo.get_all()
-        final_state = meeting_graph.invoke(
-            {
-                "audio_path": path_obj,
-                "valid_speakers": profiles,
-                "raw_segments": [],
-                "aligned_segments": [],
-                "transcript_text": "",
-                "analysis_result": None,
-                "validation_errors": [],
-                "retry_count": 0,
-                "asr": self.asr,
-                "analyzer": self.analyzer,
-                "diarization_input": resolved_diarization,
-                "speaker_mapping": speaker_mapping,
-                "run_llm_analysis": run_llm_analysis,
-            }
-        )
+        try:
+            final_state = meeting_graph.invoke(
+                {
+                    "audio_path": path_obj,
+                    "valid_speakers": profiles,
+                    "raw_segments": [],
+                    "aligned_segments": [],
+                    "transcript_text": "",
+                    "analysis_result": None,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                    "asr": self.asr,
+                    "analyzer": self.analyzer,
+                    "diarization_input": resolved_diarization,
+                    "speaker_mapping": speaker_mapping,
+                    "run_llm_analysis": run_llm_analysis,
+                }
+            )
+        finally:
+            _cleanup_gpu_vram()
 
         full_text = str(final_state.get("transcript_text") or "")
         segments: List[TranscriptSegment] = list(final_state.get("aligned_segments") or [])
@@ -174,6 +200,9 @@ class MeetingService:
                 summary=extraction.summary,
                 key_decisions=extraction.key_decisions,
                 tasks=extraction.tasks,
+                status="completed",
+                current_step="completed",
+                progress=100,
             )
         else:
             analysis = MeetingAnalysis(
@@ -185,6 +214,9 @@ class MeetingService:
                 summary="Bản bóc băng tự động từ âm thanh (Chưa chạy phân tích tổng hợp)",
                 key_decisions=[],
                 tasks=[],
+                status="completed",
+                current_step="completed",
+                progress=100,
             )
 
         meeting_id = self.meeting_repo.create(analysis)
@@ -206,6 +238,159 @@ class MeetingService:
                 task.meeting_id = meeting_id
 
         return analysis
+
+    def enqueue_audio_processing(
+        self,
+        audio_path: Union[str, Path],
+        title: str = "Cuộc họp mới",
+        owner_username: str = "nguyenhoang",
+        diarization_input: Optional[DiarizationInputType] = None,
+        auto_detect_diarization: bool = True,
+        run_llm_analysis: bool = True,
+    ) -> int:
+        """
+        Khoi tao ban ghi cuoc hop o trang thai 'queued' (progress=0), luu file ghi am
+        vao data/uploads/meeting_{id}.wav va dua tac vu vao hang doi GPU 1-worker chay nen.
+        Tra ve meeting_id ngay lap tuc de Frontend polling tien do.
+        """
+        path_obj = Path(audio_path)
+        if not path_obj.exists():
+            raise FileNotFoundError(f"Khong tim thay file am thanh tai: {path_obj.resolve()}")
+
+        meeting_title = title.strip() if title.strip() else "Cuộc họp mới"
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        meeting_id = self.meeting_repo.create_queued_meeting(
+            title=meeting_title,
+            meeting_date=today_str,
+            owner_username=owner_username,
+        )
+
+        uploads_dir = BASE_DIR / "data" / "uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        saved_meeting_wav = uploads_dir / f"meeting_{meeting_id}.wav"
+        if path_obj.resolve() != saved_meeting_wav.resolve():
+            shutil.copyfile(path_obj, saved_meeting_wav)
+
+        resolved_diarization = self._resolve_diarization_input(
+            audio_path=path_obj,
+            diarization_input=diarization_input,
+            auto_detect_diarization=auto_detect_diarization,
+        )
+
+        _gpu_pipeline_executor.submit(
+            self._run_background_audio_pipeline,
+            meeting_id,
+            saved_meeting_wav,
+            resolved_diarization,
+            run_llm_analysis,
+        )
+        logger.info(
+            "Da dua meeting_id=%d ('%s') vao hang doi GPU background worker.",
+            meeting_id,
+            meeting_title,
+        )
+        return meeting_id
+
+    def _run_background_audio_pipeline(
+        self,
+        meeting_id: int,
+        audio_path: Path,
+        diarization_input: Optional[DiarizationInputType],
+        run_llm_analysis: bool,
+    ) -> None:
+        """Ham thuc thi trong ThreadPoolExecutor(max_workers=1) voi co che cap nhat tien do tung node."""
+        def _on_progress(step: str, pct: int) -> None:
+            self.meeting_repo.update_progress(
+                meeting_id=meeting_id,
+                status="processing",
+                current_step=step,
+                progress=pct,
+                error_message=None,
+            )
+
+        try:
+            logger.info("GPU Worker bat dau xu ly meeting_id=%d...", meeting_id)
+            _on_progress("asr", 8)
+
+            profiles = self.speaker_repo.get_all()
+            final_state = meeting_graph.invoke(
+                {
+                    "meeting_id": meeting_id,
+                    "progress_callback": _on_progress,
+                    "audio_path": audio_path,
+                    "valid_speakers": profiles,
+                    "raw_segments": [],
+                    "aligned_segments": [],
+                    "transcript_text": "",
+                    "analysis_result": None,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                    "asr": self.asr,
+                    "analyzer": self.analyzer,
+                    "diarization_input": diarization_input,
+                    "speaker_mapping": None,
+                    "run_llm_analysis": run_llm_analysis,
+                }
+            )
+
+            _on_progress("saving", 96)
+            full_text = str(final_state.get("transcript_text") or "")
+            segments: List[TranscriptSegment] = list(final_state.get("aligned_segments") or [])
+            extraction: Optional[LLMExtractionOutput] = final_state.get("analysis_result")
+
+            if run_llm_analysis and extraction is not None:
+                final_segments = (
+                    extraction.cleaned_segments if extraction.cleaned_segments else segments
+                )
+                cleaned_transcript = extraction.cleaned_transcript
+                summary = extraction.summary
+                key_decisions = extraction.key_decisions
+                tasks = extraction.tasks
+            else:
+                final_segments = segments
+                cleaned_transcript = None
+                summary = "Bản bóc băng tự động từ âm thanh (Chưa chạy phân tích tổng hợp)"
+                key_decisions = []
+                tasks = []
+
+            self.meeting_repo.finalize_processed_meeting(
+                meeting_id=meeting_id,
+                raw_transcript=full_text,
+                cleaned_transcript=cleaned_transcript,
+                summary=summary,
+                key_decisions=key_decisions,
+                segments=final_segments,
+            )
+            self.task_repo.replace_meeting_tasks(
+                meeting_id=meeting_id,
+                tasks=tasks,
+            )
+            logger.info(
+                "GPU Worker hoan tat meeting_id=%d thanh cong (100%%, %d segments, %d tasks).",
+                meeting_id,
+                len(final_segments),
+                len(tasks),
+            )
+        except Exception as exc:
+            logger.error(
+                "GPU Worker gap loi khi xu ly meeting_id=%d: %s",
+                meeting_id,
+                exc,
+                exc_info=True,
+            )
+            try:
+                self.meeting_repo.update_progress(
+                    meeting_id=meeting_id,
+                    status="failed",
+                    current_step="failed",
+                    progress=0,
+                    error_message=str(exc),
+                )
+            except Exception:
+                pass
+        finally:
+            _cleanup_gpu_vram()
 
     def analyze_meeting(self, meeting_id: int) -> MeetingAnalysis:
         """

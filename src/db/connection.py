@@ -335,6 +335,10 @@ def init_db(db_path: Optional[Union[Path, str]] = None) -> None:
                     summary TEXT,
                     key_decisions TEXT,
                     owner_username TEXT DEFAULT 'nguyenhoang',
+                    status TEXT DEFAULT 'completed',
+                    current_step TEXT DEFAULT 'completed',
+                    progress INTEGER DEFAULT 100,
+                    error_message TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -346,6 +350,36 @@ def init_db(db_path: Optional[Union[Path, str]] = None) -> None:
                 cursor.execute("ALTER TABLE meetings ADD COLUMN key_decisions TEXT;")
             if "owner_username" not in existing_meeting_cols:
                 cursor.execute("ALTER TABLE meetings ADD COLUMN owner_username TEXT DEFAULT 'nguyenhoang';")
+            if "status" not in existing_meeting_cols:
+                cursor.execute("ALTER TABLE meetings ADD COLUMN status TEXT DEFAULT 'completed';")
+            if "current_step" not in existing_meeting_cols:
+                cursor.execute("ALTER TABLE meetings ADD COLUMN current_step TEXT DEFAULT 'completed';")
+            if "progress" not in existing_meeting_cols:
+                cursor.execute("ALTER TABLE meetings ADD COLUMN progress INTEGER DEFAULT 100;")
+            if "error_message" not in existing_meeting_cols:
+                cursor.execute("ALTER TABLE meetings ADD COLUMN error_message TEXT;")
+
+            if use_pg:
+                cursor.execute("ALTER TABLE meetings ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed';")
+                cursor.execute("ALTER TABLE meetings ADD COLUMN IF NOT EXISTS current_step TEXT DEFAULT 'completed';")
+                cursor.execute("ALTER TABLE meetings ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 100;")
+                cursor.execute("ALTER TABLE meetings ADD COLUMN IF NOT EXISTS error_message TEXT;")
+
+            # Chuan hoa ban ghi cu chua co status va chuyen cac ban ghi bi ket (queued/processing) khi restart sang failed
+            cursor.execute("""
+                UPDATE meetings
+                SET status = 'completed',
+                    current_step = COALESCE(current_step, 'completed'),
+                    progress = COALESCE(progress, 100)
+                WHERE status IS NULL OR status = '';
+            """)
+            cursor.execute("""
+                UPDATE meetings
+                SET status = 'failed',
+                    current_step = 'failed',
+                    error_message = 'Server restarted during processing'
+                WHERE status IN ('queued', 'processing');
+            """)
 
             # 2. Bang luu tru cong viec (tasks)
             cursor.execute(f"""

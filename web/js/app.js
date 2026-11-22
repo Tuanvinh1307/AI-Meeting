@@ -733,6 +733,18 @@ function renderSidebarMeetings() {
   box.innerHTML = state.meetings
     .map((m) => {
       const active = Number(m.id) === Number(state.currentMeetingId);
+      const mStatus = m.status || "completed";
+      const mProg = Number(m.progress ?? (mStatus === "completed" ? 100 : 0));
+      let statusTag = `<span class="text-[10px] font-mono-time text-slate-500 shrink-0">${escapeHtml(
+        (m.meeting_date || "").slice(5)
+      )}</span>`;
+      if (mStatus === "queued") {
+        statusTag = `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 shrink-0">Đang chờ</span>`;
+      } else if (mStatus === "processing") {
+        statusTag = `<span class="text-[10px] font-mono-time font-semibold px-1.5 py-0.5 rounded bg-indigo-500/25 text-indigo-300 shrink-0">${mProg}%</span>`;
+      } else if (mStatus === "failed") {
+        statusTag = `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 shrink-0">Lỗi</span>`;
+      }
       return `
         <div
           onclick="selectMeeting(${m.id}); switchTab('workspace');"
@@ -746,9 +758,7 @@ function renderSidebarMeetings() {
             <span class="text-indigo-400 font-mono-time mr-1">#${m.id}</span>
             ${escapeHtml(m.title)}
           </div>
-          <span class="text-[10px] font-mono-time text-slate-500 shrink-0">${escapeHtml(
-            (m.meeting_date || "").slice(5)
-          )}</span>
+          ${statusTag}
         </div>
       `;
     })
@@ -1357,6 +1367,80 @@ function onSelectUploadAudio(input) {
   }
 }
 
+const PIPELINE_STEP_LABELS = {
+  queued: "Đang chờ xử lý...",
+  diarization: "Đang phân tách người nói...",
+  asr: "Đang chuyển giọng nói thành văn bản...",
+  voiceprint: "Đang nhận diện người nói...",
+  llm: "Đang tóm tắt nội dung và trích xuất công việc...",
+  saving: "Đang hoàn tất biên bản...",
+  completed: "Đã hoàn tất biên bản cuộc họp!",
+  failed: "Quá trình xử lý cuộc họp gặp lỗi.",
+};
+
+function updateStudioProgressUI(status, currentStep, progress, errorMessage = "") {
+  const txtEl = document.getElementById("studio-progress-text");
+  const pctEl = document.getElementById("studio-progress-pct");
+  const barEl = document.getElementById("studio-progress-bar");
+
+  const pct = Math.max(0, Math.min(100, Number(progress) || 0));
+
+  if (txtEl) {
+    if (status === "failed") {
+      txtEl.textContent = errorMessage || PIPELINE_STEP_LABELS.failed;
+    } else {
+      txtEl.textContent =
+        PIPELINE_STEP_LABELS[currentStep] ||
+        PIPELINE_STEP_LABELS.queued;
+    }
+  }
+  if (pctEl) {
+    pctEl.textContent = `${pct}%`;
+  }
+  if (barEl) {
+    barEl.style.width = `${Math.max(4, pct)}%`;
+  }
+}
+
+function pollMeetingUntilFinished(meetingId) {
+  return new Promise((resolve, reject) => {
+    const pollIntervalMs = 1200;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/status`);
+        if (!res.ok) {
+          clearInterval(timer);
+          reject(new Error("Không thể kiểm tra tiến độ xử lý cuộc họp"));
+          return;
+        }
+        const st = await res.json();
+        updateStudioProgressUI(st.status, st.current_step, st.progress, st.error_message);
+
+        // Đồng bộ trạng thái % trên thanh Sidebar
+        const idx = state.meetings.findIndex((m) => Number(m.id) === Number(meetingId));
+        if (idx >= 0) {
+          state.meetings[idx].status = st.status;
+          state.meetings[idx].current_step = st.current_step;
+          state.meetings[idx].progress = st.progress;
+          renderSidebarMeetings();
+        }
+
+        if (st.status === "completed") {
+          clearInterval(timer);
+          updateStudioProgressUI("completed", "completed", 100);
+          resolve(st);
+        } else if (st.status === "failed") {
+          clearInterval(timer);
+          reject(new Error(st.error_message || "Xử lý file ghi âm thất bại."));
+        }
+      } catch (err) {
+        clearInterval(timer);
+        reject(err);
+      }
+    }, pollIntervalMs);
+  });
+}
+
 async function submitMeetingUpload() {
   const title = document.getElementById("upload-title").value.trim() || "Cuộc họp mới";
   const audioInput = document.getElementById("upload-audio-file");
@@ -1385,6 +1469,7 @@ async function submitMeetingUpload() {
   const progBox = document.getElementById("studio-progress-box");
   btn.disabled = true;
   progBox.classList.remove("hidden");
+  updateStudioProgressUI("queued", "queued", 2);
 
   try {
     const res = await fetch("/api/meetings/upload", {
@@ -1393,16 +1478,32 @@ async function submitMeetingUpload() {
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || "Không thể xử lý file ghi âm cuộc họp");
+      throw new Error(errData.detail || "Không thể tải lên file ghi âm cuộc họp");
     }
     const createdMeeting = await res.json();
-    showToast(`Đã xử lý xong biên bản cuộc họp #${createdMeeting.id}!`);
     state.currentMeetingId = createdMeeting.id;
+
+    updateStudioProgressUI(
+      createdMeeting.status || "queued",
+      createdMeeting.current_step || "queued",
+      createdMeeting.progress ?? 5
+    );
+    await loadDashboard(false);
+
+    if (createdMeeting.status === "queued" || createdMeeting.status === "processing") {
+      showToast(`Đang xử lý ngầm cuộc họp #${createdMeeting.id}...`, "info");
+      await pollMeetingUntilFinished(createdMeeting.id);
+    } else if (createdMeeting.status === "failed") {
+      throw new Error(createdMeeting.error_message || "Xử lý cuộc họp thất bại");
+    }
+
+    showToast(`Đã xử lý xong biên bản cuộc họp #${createdMeeting.id}!`);
     await loadDashboard(false);
     await selectMeeting(createdMeeting.id);
     switchTab("workspace");
   } catch (err) {
     showToast(err.message, "error");
+    await loadDashboard(false);
   } finally {
     btn.disabled = false;
     progBox.classList.add("hidden");

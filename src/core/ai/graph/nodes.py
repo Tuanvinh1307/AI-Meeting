@@ -51,6 +51,16 @@ def _get_default_analyzer() -> MeetingLLMAnalyzer:
     return _default_analyzer
 
 
+def _report_progress(state: MeetingGraphState, step: str, progress: int) -> None:
+    """Cap nhat tien do theo tung node LangGraph qua callback neu duoc truyen vao state."""
+    cb = state.get("progress_callback")
+    if callable(cb):
+        try:
+            cb(step, int(progress))
+        except Exception as exc:
+            logger.debug("Khong the cap nhat progress_callback (%s, %d): %s", step, progress, exc)
+
+
 def transcribe_node(state: MeetingGraphState) -> Dict[str, Any]:
     """
     Node 1:
@@ -91,6 +101,7 @@ def transcribe_node(state: MeetingGraphState) -> Dict[str, Any]:
     if diarization_source is None:
         hf_token = os.getenv("HF_TOKEN", "").strip().strip("\"'").strip()
         if hf_token and hf_token != "your_huggingface_token_here":
+            _report_progress(state, "diarization", 15)
             try:
                 pyannote_turns = diarize_audio_with_pyannote(
                     audio_path=path_obj,
@@ -112,7 +123,10 @@ def transcribe_node(state: MeetingGraphState) -> Dict[str, Any]:
             logger.warning(
                 "Khong tim thay HF_TOKEN hop le trong bien moi truong. Fallback ve chay PhoWhisper truc tiep."
             )
+    else:
+        _report_progress(state, "diarization", 20)
 
+    _report_progress(state, "asr", 35)
     if diarization_source is not None:
         full_text, segments = transcribe_with_diarization(
             asr=asr,
@@ -134,6 +148,7 @@ def transcribe_node(state: MeetingGraphState) -> Dict[str, Any]:
             "Mo hinh khong nhan dien duoc bat ky noi dung am thanh nao tu file ghi am."
         )
 
+    _report_progress(state, "asr", 55)
     out_state: Dict[str, Any] = {
         "raw_segments": segments,
         "transcript_text": full_text,
@@ -151,11 +166,13 @@ def speaker_align_node(state: MeetingGraphState) -> Dict[str, Any]:
     - Neu khong co tep phan chia nguoi noi: chi doi chieu giong noi neu segment du ro rang
       (khong dung gom cum RMS chap va gay gop sai hai nguoi vao mot khoi).
     """
+    _report_progress(state, "voiceprint", 65)
     already_aligned = state.get("aligned_segments")
     if already_aligned:
         text = state.get("transcript_text") or "\n".join(
             s.text for s in already_aligned if s.text
         )
+        _report_progress(state, "voiceprint", 75)
         return {
             "aligned_segments": already_aligned,
             "transcript_text": text,
@@ -256,6 +273,7 @@ def speaker_align_node(state: MeetingGraphState) -> Dict[str, Any]:
     transcript_text = "\n".join(s.text for s in segments if s.text) or (
         state.get("transcript_text") or ""
     )
+    _report_progress(state, "voiceprint", 75)
     return {
         "aligned_segments": segments,
         "transcript_text": transcript_text,
@@ -287,6 +305,7 @@ def analyze_node(state: MeetingGraphState) -> Dict[str, Any]:
             len(prev_errors),
         )
 
+    _report_progress(state, "llm", 82 if current_retry == 0 else min(90, 82 + current_retry * 4))
     extraction = analyzer.analyze(
         segments=aligned_segments,
         raw_transcript=transcript_text,
@@ -306,6 +325,8 @@ def validate_node(state: MeetingGraphState) -> Dict[str, Any]:
     """
     if state.get("run_llm_analysis") is False:
         return {"validation_errors": []}
+
+    _report_progress(state, "llm", 92)
 
     result = state.get("analysis_result")
     aligned_segments = state.get("aligned_segments") or state.get("raw_segments") or []

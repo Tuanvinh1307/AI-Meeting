@@ -37,9 +37,10 @@ class MeetingRepository:
                 cursor.execute(
                     """
                     INSERT INTO meetings (
-                        title, meeting_date, raw_transcript, cleaned_transcript, summary, key_decisions
+                        title, meeting_date, raw_transcript, cleaned_transcript,
+                        summary, key_decisions, status, current_step, progress, error_message
                     )
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         meeting.title,
@@ -48,6 +49,10 @@ class MeetingRepository:
                         meeting.cleaned_transcript,
                         meeting.summary,
                         key_decisions_json,
+                        meeting.status or "completed",
+                        meeting.current_step or "completed",
+                        int(meeting.progress if meeting.progress is not None else 100),
+                        meeting.error_message,
                     ),
                 )
                 meeting_id = cursor.lastrowid
@@ -114,7 +119,7 @@ class MeetingRepository:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, title, meeting_date, summary, created_at
+                SELECT id, title, meeting_date, summary, status, current_step, progress, error_message, created_at
                 FROM meetings
                 ORDER BY id DESC
                 LIMIT ?
@@ -123,6 +128,133 @@ class MeetingRepository:
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
+
+    def create_queued_meeting(
+        self,
+        title: str,
+        meeting_date: str,
+        owner_username: str,
+    ) -> int:
+        """Tao ban ghi cuoc hop moi o trang thai 'queued' (progress=0) de dua vao hang doi xu ly nen."""
+        clean_owner = (owner_username or "nguyenhoang").strip().lower() or "nguyenhoang"
+        with get_db_connection(self.db_path) as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO meetings (
+                        title, meeting_date, raw_transcript, cleaned_transcript,
+                        summary, key_decisions, owner_username,
+                        status, current_step, progress, error_message
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        title.strip() or "Cuộc họp mới",
+                        meeting_date,
+                        "",
+                        None,
+                        "Đang xếp hàng chờ xử lý...",
+                        "[]",
+                        clean_owner,
+                        "queued",
+                        "queued",
+                        0,
+                        None,
+                    ),
+                )
+                meeting_id = cursor.lastrowid
+                conn.commit()
+                return int(meeting_id)
+            except Exception as e:
+                conn.rollback()
+                logger.error("Loi khi tao queued meeting: %s", e, exc_info=True)
+                raise
+
+    def update_progress(
+        self,
+        meeting_id: int,
+        status: str,
+        current_step: Optional[str],
+        progress: int,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """Cap nhat trang thai va phan tram tien do xu ly cua cuoc hop theo tung node LangGraph."""
+        safe_progress = max(0, min(100, int(progress)))
+        with get_db_connection(self.db_path) as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    UPDATE meetings
+                    SET status = ?, current_step = ?, progress = ?, error_message = ?
+                    WHERE id = ?
+                    """,
+                    (status, current_step, safe_progress, error_message, meeting_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except Exception as e:
+                conn.rollback()
+                logger.error("Loi khi cap nhat tien do meeting_id=%d: %s", meeting_id, e, exc_info=True)
+                raise
+
+    def finalize_processed_meeting(
+        self,
+        meeting_id: int,
+        raw_transcript: str,
+        cleaned_transcript: Optional[str],
+        summary: str,
+        key_decisions: List[str],
+        segments: List[TranscriptSegment],
+    ) -> bool:
+        """Luu toan bo ket qua boc bang, phan vai, tom tat va danh dau completed (100%)."""
+        with get_db_connection(self.db_path) as conn:
+            cursor = conn.cursor()
+            try:
+                decisions_json = json.dumps(key_decisions, ensure_ascii=False)
+                cursor.execute(
+                    """
+                    UPDATE meetings
+                    SET raw_transcript = ?,
+                        cleaned_transcript = ?,
+                        summary = ?,
+                        key_decisions = ?,
+                        status = 'completed',
+                        current_step = 'completed',
+                        progress = 100,
+                        error_message = NULL
+                    WHERE id = ?
+                    """,
+                    (raw_transcript, cleaned_transcript, summary, decisions_json, meeting_id),
+                )
+                cursor.execute(
+                    "DELETE FROM transcript_segments WHERE meeting_id = ?",
+                    (meeting_id,),
+                )
+                for seg in segments:
+                    cursor.execute(
+                        """
+                        INSERT INTO transcript_segments (
+                            meeting_id, speaker_id, speaker_name, start_time, end_time, text
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            meeting_id,
+                            seg.speaker_id,
+                            seg.speaker_name,
+                            seg.start_time,
+                            seg.end_time,
+                            seg.text,
+                        ),
+                    )
+                conn.commit()
+                return True
+            except Exception as e:
+                conn.rollback()
+                logger.error("Loi khi finalize meeting_id=%d: %s", meeting_id, e, exc_info=True)
+                raise
 
     def update_summary(
         self,

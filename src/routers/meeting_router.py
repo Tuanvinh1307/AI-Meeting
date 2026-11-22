@@ -98,6 +98,11 @@ def get_meeting_detail(
     if not _can_user_access_meeting(svc, meeting_id, current_user.username):
         raise HTTPException(status_code=403, detail="Bạn không có quyền xem cuộc họp này.")
 
+    meeting_status = str(details.get("status") or "completed")
+    current_step = details.get("current_step") or ("completed" if meeting_status == "completed" else meeting_status)
+    progress_val = int(details.get("progress") if details.get("progress") is not None else (100 if meeting_status == "completed" else 0))
+    error_message = details.get("error_message")
+
     tasks = svc.get_tasks_by_meeting(meeting_id)
     segments = details.get("segments") or []
     profiles = [
@@ -107,7 +112,7 @@ def get_meeting_detail(
     audio_path = svc.get_meeting_audio_path(meeting_id)
 
     voiceprint_matches: Dict[str, dict] = {}
-    if profiles and segments and audio_path.exists():
+    if meeting_status == "completed" and profiles and segments and audio_path.exists():
         try:
             voiceprint_matches = match_speakers_to_profiles(
                 audio_path=audio_path,
@@ -143,6 +148,10 @@ def get_meeting_detail(
         "title": details["title"],
         "meeting_date": details.get("meeting_date"),
         "owner_username": _get_meeting_owner(meeting_id),
+        "status": meeting_status,
+        "current_step": current_step,
+        "progress": progress_val,
+        "error_message": error_message,
         "raw_transcript": details.get("raw_transcript") or "",
         "cleaned_transcript": details.get("cleaned_transcript") or "",
         "summary": details.get("summary") or "",
@@ -153,6 +162,39 @@ def get_meeting_detail(
         "tasks": _annotate_and_sort_tasks([t.model_dump() for t in tasks]),
         "speakers": list(speakers_summary.values()),
         "voiceprint_matches": voiceprint_matches,
+    }
+
+
+@router.get("/api/meetings/{meeting_id}/status")
+def get_meeting_processing_status(
+    meeting_id: int,
+    current_user: SpeakerProfile = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """API nhe phuc vu Frontend polling trang thai va thanh tien do xu ly cuoc hop."""
+    svc = get_service()
+    details = svc.get_meeting_details(meeting_id)
+    if not details:
+        raise HTTPException(status_code=404, detail=f"Khong tim thay cuoc hop ID={meeting_id}")
+
+    if not _can_user_access_meeting(svc, meeting_id, current_user.username):
+        raise HTTPException(status_code=403, detail="Bạn không có quyền xem cuộc họp này.")
+
+    meeting_status = str(details.get("status") or "completed")
+    current_step = details.get("current_step") or (
+        "completed" if meeting_status == "completed" else meeting_status
+    )
+    progress_val = int(
+        details.get("progress")
+        if details.get("progress") is not None
+        else (100 if meeting_status == "completed" else 0)
+    )
+    return {
+        "id": details["id"],
+        "title": details["title"],
+        "status": meeting_status,
+        "current_step": current_step,
+        "progress": progress_val,
+        "error_message": details.get("error_message"),
     }
 
 
@@ -221,19 +263,16 @@ async def upload_and_process_meeting(
         is_temp_file = True
 
     try:
-        analysis = svc.process_audio(
+        meeting_id = svc.enqueue_audio_processing(
             audio_path=audio_source_path,
             title=title,
+            owner_username=clean_owner,
             diarization_input=diarization_input,
             auto_detect_diarization=(diarization_input is None),
             run_llm_analysis=auto_analyze,
         )
-        if analysis.id is not None:
-            _set_meeting_owner(analysis.id, clean_owner)
-            saved_meeting_wav = UPLOADS_DIR / f"meeting_{analysis.id}.wav"
-            shutil.copyfile(audio_source_path, saved_meeting_wav)
     except Exception as exc:
-        logger.error("Loi khi xu ly upload cuoc hop: %s", exc, exc_info=True)
+        logger.error("Loi khi dua cuoc hop vao hang doi xu ly: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         if is_temp_file and audio_source_path.exists():
@@ -242,7 +281,7 @@ async def upload_and_process_meeting(
             except OSError:
                 pass
 
-    return get_meeting_detail(analysis.id, current_user=current_user)
+    return get_meeting_detail(meeting_id, current_user=current_user)
 
 
 @router.post("/api/meetings/{meeting_id}/analyze")
