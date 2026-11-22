@@ -28,6 +28,8 @@ class MeetingGraphState(TypedDict, total=False):
     # Cac tham so dieu phoi runtime tuy chon
     meeting_id: Optional[int]
     progress_callback: Optional[Callable[[str, int], None]]
+    timings: Dict[str, float]
+    audio_duration_sec: float
     asr: Optional[PhoWhisperASR]
     analyzer: Optional[MeetingLLMAnalyzer]
     diarization_input: Optional[DiarizationInputType]

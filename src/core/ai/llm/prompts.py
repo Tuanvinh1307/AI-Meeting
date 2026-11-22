@@ -47,7 +47,8 @@ def build_system_prompt() -> str:
         "   - Khong lap nguyen van phan 'key_decisions' (Ket luan chinh); tap trung khai quat nhung viec chinh da trao doi.\n"
         "2. Giu nguyen logic tach 'key_decisions' va 'tasks' (phan 'tasks' van giu ro ten nguoi giao assigner va nguoi thuc hien assignee).\n"
         "3. Tuyet doi khong suy dien hoac bia cong viec neu khong co can cu trong hoi thoai.\n"
-        "4. Moi task bat buoc phai trich dan dung source_quote va moc thoi gian cua Turn goc."
+        "4. Moi task bat buoc phai trich dan dung source_quote va moc thoi gian cua Turn goc.\n"
+        "5. Tach rieng tung cam ket hoac yeu cau cong viec o cac luot thoai (Turn) khac nhau thanh cac task doc lap (khong gop chung nhieu dau viec vao 1 task)."
     )
 
 

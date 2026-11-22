@@ -94,12 +94,15 @@ def run_tests():
         print(f"   [{seg['start_time']}s - {seg['end_time']}s] {seg['speaker_name']} ({seg['speaker_id']}): {seg['text']}")
         assert seg["text"].strip(), "Nội dung segment không được rỗng!"
 
-    # 7. Bài test 4: Timestamp None vẫn được bảo toàn
-    print("\n--- BÀI TEST 4: BẢO TOÀN TIMESTAMP NONE NẾU MODEL KHÔNG DỰ ĐOÁN END_TIME ---")
+    # 7. Bài test 4: Kiểm tra tính hợp lệ của timestamp (hoặc bảo toàn None nếu model không trả end_time)
+    print("\n--- BÀI TEST 4: KIỂM TRA TIMESTAMP HỢP LỆ TỪ FASTER-WHISPER / BẢO TOÀN NONE ---")
     last_seg = segments[-1]
     print(f"   Last segment: start_time={last_seg['start_time']}, end_time={last_seg['end_time']}")
-    assert any(s["end_time"] is None for s in segments), "end_time phải được bảo toàn là None, không bị gán bừa!"
-    print("   ✅ Xác nhận: Timestamp None được bảo toàn chính xác trong Database.")
+    assert all(
+        s["end_time"] is None or (s["start_time"] is not None and s["end_time"] >= s["start_time"])
+        for s in segments
+    ), "Timestamp end_time phải là None hoặc >= start_time hợp lệ!"
+    print("   ✅ Xác nhận: Timestamp của các segment được lưu chính xác trong Database.")
 
     # 8. Bài test 5: Không có tasks giả
     print("\n--- BÀI TEST 5: XÁC MINH KHÔNG CÓ TASKS GIẢ MẠO ĐƯỢC SINH RA ---")

@@ -12,9 +12,11 @@ bcrypt>=4.2.0
 # Database Driver (PostgreSQL 17)
 psycopg2-binary>=2.9.9
 
-# AI, Speech Recognition, Speaker Diarization (GTX 1060 sm_61 / CUDA 12.4) & LangGraph
+# AI, Speech Recognition (faster-whisper int8 + CTranslate2 CUDA 12 / cuDNN 9), Speaker Diarization & LangGraph
 torch==2.6.0
 torchaudio==2.6.0
+ctranslate2==4.9.0
+faster-whisper==1.1.1
 pyannote.audio==3.3.2
 transformers>=4.45.0
 soundfile>=0.12.1

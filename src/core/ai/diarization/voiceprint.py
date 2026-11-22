@@ -285,21 +285,32 @@ def match_speakers_to_profiles(
 
     speaker_embeddings: Dict[str, np.ndarray] = {}
     for sid, intervals in speaker_intervals.items():
+        # Toi uu toc do: chi lay toi da 3 doan noi dai va ro nhat (>= 0.8s, hoac top 3 doan dai nhat)
+        # cho moi cum speaker_id thay vi trich xuat embedding tren toan bo cac cau le
+        clear_intervals = [iv for iv in intervals if (iv[1] - iv[0]) >= 0.8]
+        candidate_intervals = clear_intervals if clear_intervals else intervals
+        top_intervals = sorted(
+            candidate_intervals,
+            key=lambda iv: iv[1] - iv[0],
+            reverse=True,
+        )[:3]
+
         vecs: List[np.ndarray] = []
         concat_pieces: List[np.ndarray] = []
         sr_val: Optional[int] = None
-        for st, et in intervals:
+        for st, et in top_intervals:
             try:
-                piece, sr_val = _load_mono_slice(path_obj, start_time=st, end_time=et)
+                # Gioi han moi doan mau toi da 15s de tinh autocorrelation F0 nhanh va on dinh
+                clipped_et = min(et, st + 15.0)
+                piece, sr_val = _load_mono_slice(path_obj, start_time=st, end_time=clipped_et)
                 if piece.size > 0:
                     concat_pieces.append(piece)
-                if et - st >= 0.8:
                     emb = _compute_embedding_from_signal(piece, sr_val)
                     vecs.append(np.asarray(emb, dtype=np.float64))
             except Exception as e:
                 logger.debug("Bo qua doan am thanh loi cua %s [%.2f-%.2f]: %s", sid, st, et, e)
 
-        if concat_pieces and sr_val is not None:
+        if len(concat_pieces) > 1 and sr_val is not None:
             full_speaker_signal = np.concatenate(concat_pieces)
             full_emb = np.asarray(_compute_embedding_from_signal(full_speaker_signal, sr_val), dtype=np.float64)
             vecs.append(full_emb)
